@@ -1,5 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
+import budgetBuddyLogo from '../assets/logo.png';
 import {
   Wallet,
   ArrowRight,
@@ -153,9 +154,11 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-8">
             <NavLink to="/" className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center shadow-md shadow-emerald-500/20">
-                <Wallet className="w-5 h-5 text-slate-950 font-bold" />
-              </div>
+              <img
+                src={budgetBuddyLogo}
+                alt="BudgetBuddy Logo"
+                className="w-10 h-10 object-contain drop-shadow"
+              />
               <span className="font-bold text-xl tracking-tight text-white">
                 BudgetBuddy
               </span>
@@ -187,9 +190,21 @@ export default function LandingPage() {
       </header>
 
       {/* Hero Section */}
-      <section className="relative overflow-hidden pt-20 pb-20 lg:pt-28 lg:pb-32">
+      <section className="relative overflow-hidden pt-12 pb-20 lg:pt-16 lg:pb-32">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 text-center">
-          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 mb-8">
+          {/* Official Mascot Display */}
+          <div className="flex justify-center mb-6">
+            <div className="relative group">
+              <div className="absolute -inset-1 bg-gradient-to-r from-emerald-500 to-teal-400 rounded-full blur-xl opacity-30 group-hover:opacity-60 transition duration-500" />
+              <img
+                src={budgetBuddyLogo}
+                alt="BudgetBuddy Mascot Logo"
+                className="relative w-36 h-36 sm:w-44 sm:h-44 object-contain drop-shadow-2xl transform hover:scale-105 transition-transform duration-300"
+              />
+            </div>
+          </div>
+
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 mb-6">
             <Sparkles className="w-4 h-4" />
             <span>Smart Personal Finance & Budget Planning Platform</span>
           </div>
@@ -417,9 +432,7 @@ export default function LandingPage() {
       <footer className="border-t border-slate-800 bg-slate-950 py-12 mt-auto">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row items-center justify-between gap-6">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-emerald-500 flex items-center justify-center font-bold text-slate-950">
-              <Wallet className="w-4 h-4" />
-            </div>
+            <img src={budgetBuddyLogo} alt="BudgetBuddy" className="w-8 h-8 object-contain" />
             <span className="font-bold text-base text-white">BudgetBuddy</span>
             <span className="text-xs text-slate-500 ml-2">Personal Budget & Expense Management</span>
           </div>

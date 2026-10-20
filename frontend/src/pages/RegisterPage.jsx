@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import budgetBuddyLogo from '../assets/logo.png';
 import { Wallet, User, Mail, Lock, AlertCircle, ArrowRight, Eye, EyeOff, Loader2, Sparkles, Check } from 'lucide-react';
 
 export default function RegisterPage() {
@@ -72,10 +73,12 @@ export default function RegisterPage() {
 
       <div className="sm:mx-auto sm:w-full sm:max-w-xl relative z-10">
         <div className="flex justify-center">
-          <NavLink to="/" className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center shadow-lg shadow-emerald-500/20">
-              <Wallet className="w-5 h-5 text-slate-950 font-bold" />
-            </div>
+          <NavLink to="/" className="flex flex-col items-center gap-2 group">
+            <img
+              src={budgetBuddyLogo}
+              alt="BudgetBuddy Logo"
+              className="w-16 h-16 object-contain drop-shadow-xl group-hover:scale-105 transition-transform"
+            />
             <span className="font-bold text-2xl text-white tracking-tight">
               BudgetBuddy
             </span>

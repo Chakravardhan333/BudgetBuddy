@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { NavLink, useSearchParams, useNavigate } from 'react-router-dom';
 import { Wallet, Mail, Lock, ArrowRight, ArrowLeft, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 import { authService } from '../api/client';
+import budgetBuddyLogo from '../assets/logo.png';
 
 export default function ForgotPasswordPage() {
   const [searchParams] = useSearchParams();
@@ -68,10 +69,12 @@ export default function ForgotPasswordPage() {
     <div className="min-h-screen bg-slate-950 flex flex-col justify-center py-12 sm:px-6 lg:px-8 relative selection:bg-emerald-500 selection:text-white">
       <div className="sm:mx-auto sm:w-full sm:max-w-md relative z-10 px-4 sm:px-0">
         <div className="flex justify-center mb-6">
-          <NavLink to="/" className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center shadow-lg shadow-emerald-500/20">
-              <Wallet className="w-5 h-5 text-slate-950 font-bold" />
-            </div>
+          <NavLink to="/" className="flex flex-col items-center gap-2 group">
+            <img
+              src={budgetBuddyLogo}
+              alt="BudgetBuddy Logo"
+              className="w-16 h-16 object-contain drop-shadow-xl group-hover:scale-105 transition-transform"
+            />
             <span className="font-bold text-2xl text-white tracking-tight">
               BudgetBuddy
             </span>

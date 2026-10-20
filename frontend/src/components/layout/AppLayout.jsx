@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { notificationsService } from '../../api/notifications';
+import budgetBuddyLogo from '../../assets/logo.png';
 import {
   Wallet,
   LayoutDashboard,
@@ -99,17 +100,19 @@ export default function AppLayout() {
       >
         <div>
           {/* Logo Header */}
-          <div className="h-16 px-6 flex items-center justify-between border-b border-slate-800/80">
-            <NavLink to="/dashboard" className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center text-slate-950 font-bold shadow-md shadow-emerald-500/20">
-                <Wallet className="w-5 h-5 text-slate-950" />
-              </div>
+          <div className="h-16 px-5 flex items-center justify-between border-b border-slate-800/80">
+            <NavLink to="/dashboard" className="flex items-center gap-2.5">
+              <img
+                src={budgetBuddyLogo}
+                alt="BudgetBuddy Logo"
+                className="w-10 h-10 object-contain drop-shadow"
+              />
               <div className="flex flex-col">
                 <span className="font-bold text-lg text-white tracking-tight leading-none">
                   BudgetBuddy
                 </span>
-                <span className="text-[10px] text-slate-400 font-medium tracking-wider uppercase mt-1">
-                  Fintech Platform
+                <span className="text-[10px] text-emerald-400 font-semibold tracking-wider uppercase mt-1">
+                  Personal Finance
                 </span>
               </div>
             </NavLink>
