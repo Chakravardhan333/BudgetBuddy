@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # BudgetBuddy — Personal Budget Planning & Expense Management Platform
 
 BudgetBuddy is a commercial-grade, full-stack personal finance web application built with **React**, **Vite**, **Tailwind CSS**, **Python**, and **Django REST Framework**.
@@ -176,3 +177,7 @@ npm run build
    - `DEBUG`: `False`
    - `ALLOWED_HOSTS`: `.onrender.com`
    - `CORS_ALLOWED_ORIGINS`: `https://your-frontend.vercel.app`
+=======
+# BudgetBuddy
+BudgetBuddy is a personal finance management project that helps users track income, manage expenses, create budgets, and monitor their savings.
+>>>>>>> 7cc490b8f624bb57caf3cf23d9ded3bae1364bcd
