@@ -25,7 +25,7 @@ export const AuthProvider = ({ children }) => {
             email: profileData.email,
             first_name: profileData.first_name,
             last_name: profileData.last_name,
-            full_name: `${profileData.first_name} ${profileData.last_name}`.strip || profileData.username,
+            full_name: `${profileData.first_name} ${profileData.last_name}`.trim() || profileData.username,
             role: profileData.profile?.role || 'student',
             currency: profileData.profile?.currency || 'USD',
             currency_symbol: profileData.profile?.currency_symbol || '$',

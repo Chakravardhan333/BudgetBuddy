@@ -136,3 +136,35 @@ class AccountsAuthenticationTests(TestCase):
             'password': 'BrandNewPassword123!',
         }, format='json')
         self.assertEqual(new_login.status_code, status.HTTP_200_OK)
+
+    def test_password_reset_request_and_confirm(self):
+        from django.contrib.auth.tokens import default_token_generator
+        from django.utils.http import urlsafe_base64_encode
+        from django.utils.encoding import force_bytes
+
+        # Create user
+        user = User.objects.create_user(username='reset_user', email='reset@budgetbuddy.test', password='OldPassword123!')
+
+        # 1. Request password reset
+        req_res = self.client.post(reverse('password_reset_request'), {'email': 'reset@budgetbuddy.test'}, format='json')
+        self.assertEqual(req_res.status_code, status.HTTP_200_OK)
+
+        # 2. Confirm password reset with generated token
+        token = default_token_generator.make_token(user)
+        uidb64 = urlsafe_base64_encode(force_bytes(user.pk))
+
+        confirm_payload = {
+            'uidb64': uidb64,
+            'token': token,
+            'new_password': 'BrandNewSecurePassword123!',
+            'new_password_confirm': 'BrandNewSecurePassword123!',
+        }
+        confirm_res = self.client.post(reverse('password_reset_confirm'), confirm_payload, format='json')
+        self.assertEqual(confirm_res.status_code, status.HTTP_200_OK)
+
+        # 3. Verify user can now login with new password
+        login_res = self.client.post(self.login_url, {
+            'username': 'reset_user',
+            'password': 'BrandNewSecurePassword123!',
+        }, format='json')
+        self.assertEqual(login_res.status_code, status.HTTP_200_OK)

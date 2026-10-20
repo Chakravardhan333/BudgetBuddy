@@ -176,6 +176,33 @@ def generate_pdf_report(user, year=None, month=None):
         elements.append(t_cat)
         elements.append(Spacer(1, 12))
 
+    # Budget Utilization Summary
+    if budgets_qs.exists():
+        elements.append(Paragraph("Monthly Budget Utilization & Performance", section_heading))
+        b_data = [[Paragraph("Period", cell_bold), Paragraph("Scope / Category", cell_bold), Paragraph("Budget Cap", cell_bold), Paragraph("Actual Spending", cell_bold), Paragraph("Utilization", cell_bold)]]
+        for b in budgets_qs:
+            exp_b = Expense.objects.filter(user=user, date__year=b.year, date__month=b.month)
+            if b.category:
+                exp_b = exp_b.filter(category_name__iexact=b.category)
+            spending = exp_b.aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+            util = float(spending / b.monthly_limit * 100) if b.monthly_limit > 0 else 0.0
+            b_data.append([
+                Paragraph(f"{b.month:02d}/{b.year}", cell_style),
+                Paragraph(b.category or "Overall Monthly", cell_style),
+                Paragraph(f"{currency_sym}{b.monthly_limit:.2f}", cell_style),
+                Paragraph(f"{currency_sym}{spending:.2f}", cell_style),
+                Paragraph(f"{util:.1f}%", cell_bold if util >= b.warning_threshold else cell_style),
+            ])
+        t_b = Table(b_data, colWidths=[80, 180, 100, 100, 80])
+        t_b.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#f8fafc')),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#e2e8f0')),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+        ]))
+        elements.append(t_b)
+        elements.append(Spacer(1, 12))
+
     # Savings Goals Summary
     if goals_qs.exists():
         elements.append(Paragraph("Savings Goals Progress", section_heading))
@@ -390,6 +417,34 @@ def generate_excel_report(user, year=None, month=None):
             g.target_date.strftime("%Y-%m-%d"),
             g.get_status_display(),
             f"{pct:.1f}%",
+        ])
+
+    # Sheet 6: Budget Summary
+    ws_budgets = wb.create_sheet(title="Budget Summary")
+    ws_budgets.views.sheetView[0].showGridLines = True
+    budget_headers = ["Period", "Category", "Budget Limit", "Actual Spending", "Remaining", "Utilization %", "Status"]
+    ws_budgets.append(budget_headers)
+    for c_idx in range(1, len(budget_headers) + 1):
+        cell = ws_budgets.cell(row=1, column=c_idx)
+        cell.fill = navy_fill
+        cell.font = header_font
+
+    for b in budgets_qs:
+        exp_b = Expense.objects.filter(user=user, date__year=b.year, date__month=b.month)
+        if b.category:
+            exp_b = exp_b.filter(category_name__iexact=b.category)
+        spending = exp_b.aggregate(total=Sum('amount'))['total'] or Decimal('0.00')
+        remaining = b.monthly_limit - spending
+        util = float(spending / b.monthly_limit * 100) if b.monthly_limit > 0 else 0.0
+        status_label = "Exceeded" if spending > b.monthly_limit else ("Near Limit" if util >= b.warning_threshold else "On Track")
+        ws_budgets.append([
+            f"{b.month:02d}/{b.year}",
+            b.category or "Overall Monthly",
+            float(b.monthly_limit),
+            float(spending),
+            float(remaining),
+            f"{util:.1f}%",
+            status_label,
         ])
 
     # Auto-adjust column widths for all sheets

@@ -41,6 +41,7 @@ export default function NotificationsPage() {
       setNotifications((prev) =>
         prev.map((n) => (n.id === id ? { ...n, is_read: true } : n))
       );
+      window.dispatchEvent(new Event('notifications:updated'));
     } catch (err) {
       console.error("Failed to mark notification read:", err);
     }
@@ -50,6 +51,7 @@ export default function NotificationsPage() {
     try {
       await notificationsService.markAllAsRead();
       setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
+      window.dispatchEvent(new Event('notifications:updated'));
     } catch (err) {
       console.error("Failed to mark all read:", err);
     }

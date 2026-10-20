@@ -44,6 +44,9 @@ export default function AppLayout() {
       }
     };
     checkUnread();
+
+    window.addEventListener('notifications:updated', checkUnread);
+    return () => window.removeEventListener('notifications:updated', checkUnread);
   }, [location.pathname]);
 
   const handleLogout = async () => {

@@ -1,6 +1,7 @@
 from datetime import date, timedelta
 from decimal import Decimal
 from django.db.models import Sum
+from django.utils import timezone
 from .models import Notification
 from transactions.models import Budget, Expense, SavingsGoal
 
@@ -9,10 +10,10 @@ def trigger_user_notifications(user):
     Evaluates real financial records and generates relevant threshold alerts
     and milestone notifications, automatically deduplicating repeated alerts.
     """
-    today = date.today()
-    current_year = today.year
-    current_month = today.month
-    recent_cutoff = today - timedelta(days=14)
+    now = timezone.now()
+    current_year = now.year
+    current_month = now.month
+    recent_cutoff = now - timedelta(days=14)
 
     # 1. Budget Checks
     budgets = Budget.objects.filter(user=user, year=current_year, month=current_month)

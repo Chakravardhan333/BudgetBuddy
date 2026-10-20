@@ -131,6 +131,16 @@ export const authService = {
     return response.data;
   },
 
+  requestPasswordReset: async (email) => {
+    const response = await apiClient.post('/accounts/password-reset/request/', { email });
+    return response.data;
+  },
+
+  confirmPasswordReset: async (data) => {
+    const response = await apiClient.post('/accounts/password-reset/confirm/', data);
+    return response.data;
+  },
+
   logout: async () => {
     const refreshToken = localStorage.getItem('budgetbuddy_refresh_token');
     try {

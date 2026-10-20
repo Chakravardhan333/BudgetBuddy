@@ -140,7 +140,7 @@ export default function ReportsPage() {
             </div>
             <h2 className="text-lg font-bold text-slate-900">PDF Financial Statement</h2>
             <p className="text-xs text-slate-500 leading-relaxed">
-              Official formatted statement with executive summaries, category-wise expenditure tables, savings targets, and a general debit/credit ledger.
+              Official formatted statement with executive summaries, category-wise expenditure tables, budget utilization performance, savings targets, and a general debit/credit ledger.
             </p>
             <ul className="text-xs text-slate-600 space-y-1.5 pt-2">
               <li className="flex items-center gap-2">
@@ -149,11 +149,11 @@ export default function ReportsPage() {
               </li>
               <li className="flex items-center gap-2">
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                <span>Includes category percentage breakdowns</span>
+                <span>Monthly budget utilization & cap performance</span>
               </li>
               <li className="flex items-center gap-2">
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                <span>Includes savings milestone statuses</span>
+                <span>Category percentage breakdowns & savings milestones</span>
               </li>
             </ul>
           </div>
@@ -185,7 +185,7 @@ export default function ReportsPage() {
             </div>
             <h2 className="text-lg font-bold text-slate-900">Excel XLSX Multi-Tab Ledger</h2>
             <p className="text-xs text-slate-500 leading-relaxed">
-              Complete multi-sheet workbook with dedicated tabs for Executive Summary, Expenses, Income, Category Aggregates, and Savings Goals.
+              Complete multi-sheet workbook with dedicated tabs for Executive Summary, Expenses, Income, Category Aggregates, Savings Goals, and Budget Summary.
             </p>
             <ul className="text-xs text-slate-600 space-y-1.5 pt-2">
               <li className="flex items-center gap-2">

@@ -62,3 +62,33 @@ class ReportsExportTests(TestCase):
         self.assertEqual(pdf_res.status_code, status.HTTP_401_UNAUTHORIZED)
         excel_res = unauth_client.get(self.excel_url)
         self.assertEqual(excel_res.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_export_reports_with_date_filters(self):
+        today = date.today()
+        res_pdf = self.client.get(self.pdf_url, {'year': today.year, 'month': today.month})
+        self.assertEqual(res_pdf.status_code, status.HTTP_200_OK)
+        self.assertTrue(res_pdf.content.startswith(b'%PDF-'))
+
+        res_excel = self.client.get(self.excel_url, {'year': today.year, 'month': today.month})
+        self.assertEqual(res_excel.status_code, status.HTTP_200_OK)
+        self.assertTrue(res_excel.content.startswith(b'PK\x03\x04'))
+
+    def test_user_data_isolation_in_reports(self):
+        # Create second user with distinct secret expense
+        other_user = User.objects.create_user(username='other_rep_user', password='Password123!')
+        Expense.objects.create(
+            user=other_user, amount=Decimal('9999.00'), category_name='SecretCategory',
+            date=date.today(), description='ConfidentialOtherExpense'
+        )
+
+        # First user requests excel report
+        excel_res = self.client.get(self.excel_url)
+        import openpyxl, io
+        wb = openpyxl.load_workbook(io.BytesIO(excel_res.content))
+        # Ensure 'Budget Summary' sheet exists
+        self.assertIn('Budget Summary', wb.sheetnames)
+        self.assertIn('Expenses', wb.sheetnames)
+        exp_sheet = wb['Expenses']
+        descriptions = [row[2] for row in exp_sheet.iter_rows(min_row=2, values_only=True)]
+        self.assertNotIn('ConfidentialOtherExpense', descriptions)
+        self.assertIn('Dinner with family', descriptions)
