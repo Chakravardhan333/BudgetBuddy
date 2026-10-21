@@ -174,6 +174,11 @@ else:
     CORS_ALLOW_ALL_ORIGINS = False
     CORS_ALLOWED_ORIGINS = []
 
+# Automatically allow all Vercel deployment preview and production domains
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r"^https://.*\.vercel\.app$",
+]
+
 CORS_ALLOW_CREDENTIALS = True
 
 csrf_trusted_env = os.environ.get('CSRF_TRUSTED_ORIGINS', '')
@@ -181,6 +186,7 @@ if csrf_trusted_env:
     CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in csrf_trusted_env.split(',') if origin.strip()]
 else:
     CSRF_TRUSTED_ORIGINS = [origin for origin in CORS_ALLOWED_ORIGINS if origin.startswith(('http://', 'https://'))]
+    CSRF_TRUSTED_ORIGINS.extend(['https://*.vercel.app', 'https://*.onrender.com'])
 
 # Production Security & HTTPS Settings
 if not DEBUG:
