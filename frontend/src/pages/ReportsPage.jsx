@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { reportsService } from '../api/reports';
+import { getTimezonePreference } from '../utils/formatters';
 import {
   FileSpreadsheet,
   FileText,
@@ -24,13 +25,15 @@ export default function ReportsPage() {
 
   const getParams = () => {
     const today = new Date();
+    const tz = getTimezonePreference();
+    const base = { timezone: tz };
     if (period === 'current_month') {
-      return { month: today.getMonth() + 1, year: today.getFullYear() };
+      return { ...base, month: today.getMonth() + 1, year: today.getFullYear() };
     }
     if (period === 'current_year') {
-      return { year: today.getFullYear() };
+      return { ...base, year: today.getFullYear() };
     }
-    return {};
+    return base;
   };
 
   const handleDownloadPdf = async () => {

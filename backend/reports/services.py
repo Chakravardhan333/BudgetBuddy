@@ -1,6 +1,7 @@
 import io
 from datetime import datetime, date
 from decimal import Decimal
+from zoneinfo import ZoneInfo
 from django.db.models import Sum
 
 # ReportLab Imports
@@ -28,7 +29,15 @@ def get_user_currency_symbol(user):
         return user.profile.currency_symbol
     return '$'
 
-def generate_pdf_report(user, year=None, month=None):
+def _get_localized_now_str(tz_name='Asia/Kolkata'):
+    try:
+        tz = ZoneInfo(tz_name) if tz_name else ZoneInfo('Asia/Kolkata')
+    except Exception:
+        tz = ZoneInfo('Asia/Kolkata')
+    now = datetime.now(tz)
+    return now.strftime("%B %d, %Y at %I:%M %p %Z")
+
+def generate_pdf_report(user, year=None, month=None, timezone_str='Asia/Kolkata'):
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(
         buffer,
@@ -41,7 +50,7 @@ def generate_pdf_report(user, year=None, month=None):
 
     currency_sym = get_user_currency_symbol(user)
     currency_code = getattr(user.profile, 'currency', 'USD') if hasattr(user, 'profile') else 'USD'
-    now_str = datetime.now().strftime("%B %d, %Y at %I:%M %p")
+    now_str = _get_localized_now_str(timezone_str)
 
     # Filter records
     expenses_qs = Expense.objects.filter(user=user)
@@ -276,7 +285,7 @@ def generate_pdf_report(user, year=None, month=None):
     return buffer.getvalue()
 
 
-def generate_excel_report(user, year=None, month=None):
+def generate_excel_report(user, year=None, month=None, timezone_str='Asia/Kolkata'):
     wb = openpyxl.Workbook()
     currency_sym = get_user_currency_symbol(user)
 
@@ -320,7 +329,7 @@ def generate_excel_report(user, year=None, month=None):
     ws_summary["A1"] = "BudgetBuddy Financial Statement"
     ws_summary["A1"].font = title_font
     ws_summary["A2"] = f"Account: {user.get_full_name() or user.username} ({user.email})"
-    ws_summary["A3"] = f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+    ws_summary["A3"] = f"Generated: {_get_localized_now_str(timezone_str)}"
     ws_summary["A4"] = f"Currency: {currency_sym} ({getattr(user.profile, 'currency', 'USD') if hasattr(user, 'profile') else 'USD'})"
 
     summary_rows = [

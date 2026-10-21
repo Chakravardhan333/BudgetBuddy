@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { notificationsService } from '../../api/notifications';
+import LiveClock from '../common/LiveClock';
 import budgetBuddyLogo from '../../assets/logo.png';
 import {
   Wallet,
@@ -20,11 +21,8 @@ import {
   LogOut,
   Menu,
   X,
-  Search,
   ChevronDown,
-  CreditCard,
-  Sparkles,
-  ExternalLink
+  CreditCard
 } from 'lucide-react';
 
 export default function AppLayout() {
@@ -47,7 +45,11 @@ export default function AppLayout() {
     checkUnread();
 
     window.addEventListener('notifications:updated', checkUnread);
-    return () => window.removeEventListener('notifications:updated', checkUnread);
+    window.addEventListener('finance:mutation', checkUnread);
+    return () => {
+      window.removeEventListener('notifications:updated', checkUnread);
+      window.removeEventListener('finance:mutation', checkUnread);
+    };
   }, [location.pathname]);
 
   const handleLogout = async () => {
@@ -237,6 +239,9 @@ export default function AppLayout() {
           </div>
 
           <div className="flex items-center gap-3">
+            {/* Real-time Clock Component */}
+            <LiveClock />
+
             {/* Currency Pill */}
             <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 border border-slate-200 text-xs font-semibold text-slate-700">
               <CreditCard className="w-3.5 h-3.5 text-emerald-600" />

@@ -154,3 +154,35 @@ class TransactionsModuleTests(TestCase):
         goal_completed = self.client_a.get(reverse('savings_goal-detail', kwargs={'pk': goal_id}))
         self.assertEqual(float(goal_completed.data['current_amount']), 1000.00)
         self.assertEqual(goal_completed.data['status'], 'completed')
+
+    def test_date_range_filtering(self):
+        # Create expenses across different dates
+        self.client_a.post(self.expenses_url, {
+            'amount': '50.00', 'category_name': 'Food & Dining', 'date': '2026-05-10', 'description': 'Past expense'
+        }, format='json')
+        self.client_a.post(self.expenses_url, {
+            'amount': '80.00', 'category_name': 'Travel', 'date': '2026-06-15', 'description': 'Mid expense'
+        }, format='json')
+        self.client_a.post(self.expenses_url, {
+            'amount': '120.00', 'category_name': 'Shopping', 'date': '2026-07-20', 'description': 'Late expense'
+        }, format='json')
+
+        # Filter by start_date and end_date
+        res_filtered = self.client_a.get(self.expenses_url, {'start_date': '2026-06-01', 'end_date': '2026-06-30'})
+        self.assertEqual(res_filtered.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(res_filtered.data), 1)
+        self.assertEqual(res_filtered.data[0]['description'], 'Mid expense')
+
+    def test_zero_records_empty_state_summary(self):
+        # User B has no records
+        res_summary_b = self.client_b.get(self.summary_url)
+        self.assertEqual(res_summary_b.status_code, status.HTTP_200_OK)
+        data = res_summary_b.data
+        self.assertEqual(data['balance'], 0.0)
+        self.assertEqual(data['total_income'], 0.0)
+        self.assertEqual(data['total_expenses'], 0.0)
+        self.assertEqual(data['monthly_income'], 0.0)
+        self.assertEqual(data['monthly_expenses'], 0.0)
+        self.assertEqual(data['savings_rate'], 0.0)
+        self.assertEqual(len(data['recent_transactions']), 0)
+        self.assertEqual(len(data['category_breakdown']), 0)
