@@ -66,10 +66,26 @@ export const AuthProvider = ({ children }) => {
       setUser(data.user);
       return { success: true, user: data.user };
     } catch (err) {
-      const message =
-        err.response?.data?.detail ||
-        err.response?.data?.non_field_errors?.[0] ||
-        'Invalid username or password. Please try again.';
+      let message = 'Invalid username or password. Please try again.';
+
+      if (err.code === 'ECONNABORTED' || err.message?.toLowerCase().includes('timeout')) {
+        message = 'Connection timed out. The backend server may be waking up (Render free tier). Please wait a moment and try again.';
+      } else if (!err.response) {
+        message = 'Cannot connect to the backend service. Please check your network connection and verify that the backend API is running.';
+      } else if (err.response.status >= 500) {
+        message = `Backend server error (${err.response.status}). Please try again shortly or check backend service logs.`;
+      } else if (err.response.data?.detail) {
+        message = err.response.data.detail;
+      } else if (err.response.data?.non_field_errors?.[0]) {
+        message = err.response.data.non_field_errors[0];
+      } else if (typeof err.response.data === 'object') {
+        const firstKey = Object.keys(err.response.data)[0];
+        if (firstKey) {
+          const val = err.response.data[firstKey];
+          message = Array.isArray(val) ? `${firstKey}: ${val[0]}` : `${firstKey}: ${val}`;
+        }
+      }
+
       setAuthError(message);
       return { success: false, error: message };
     }
@@ -85,17 +101,40 @@ export const AuthProvider = ({ children }) => {
       setUser(data.user);
       return { success: true, user: data.user };
     } catch (err) {
-      const errorData = err.response?.data || {};
       let message = 'Registration failed. Please check the fields and try again.';
-      if (typeof errorData === 'object') {
-        const firstKey = Object.keys(errorData)[0];
-        if (firstKey) {
-          const val = errorData[firstKey];
-          message = Array.isArray(val) ? `${firstKey}: ${val[0]}` : `${firstKey}: ${val}`;
+      let fieldErrors = {};
+
+      if (err.code === 'ECONNABORTED' || err.message?.toLowerCase().includes('timeout')) {
+        message = 'Connection timed out. The backend server may be waking up (Render free tier). Please wait a moment and try again.';
+      } else if (!err.response) {
+        message = 'Cannot connect to the backend service. Please check your network connection and verify that the backend API is running.';
+      } else if (err.response.status >= 500) {
+        message = err.response.data?.detail || `Backend server error (${err.response.status}). Please try again later or check backend service logs.`;
+      } else if (err.response.data) {
+        const errorData = err.response.data;
+        if (typeof errorData === 'string') {
+          message = errorData;
+        } else if (typeof errorData === 'object') {
+          fieldErrors = errorData;
+          if (errorData.detail) {
+            message = errorData.detail;
+          } else {
+            const errorList = [];
+            for (const [key, val] of Object.entries(errorData)) {
+              const label = key.replace(/_/g, ' ');
+              const capitalizedLabel = label.charAt(0).toUpperCase() + label.slice(1);
+              const errorText = Array.isArray(val) ? val.join(' ') : String(val);
+              errorList.push(`${capitalizedLabel}: ${errorText}`);
+            }
+            if (errorList.length > 0) {
+              message = errorList.join(' • ');
+            }
+          }
         }
       }
+
       setAuthError(message);
-      return { success: false, error: message, errors: errorData };
+      return { success: false, error: message, errors: fieldErrors };
     }
   };
 
