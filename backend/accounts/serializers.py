@@ -40,10 +40,15 @@ class UserSerializer(serializers.ModelSerializer):
 
 
 class RegisterSerializer(serializers.ModelSerializer):
+    REGISTRATION_ROLE_CHOICES = (
+        ('student', 'Student'),
+        ('premium', 'Premium User'),
+    )
+
     password = serializers.CharField(write_only=True, required=True, validators=[validate_password])
     password_confirm = serializers.CharField(write_only=True, required=True)
     email = serializers.EmailField(required=True)
-    role = serializers.ChoiceField(choices=UserProfile.ROLE_CHOICES, default='student', required=False)
+    role = serializers.ChoiceField(choices=REGISTRATION_ROLE_CHOICES, default='student', required=False)
     currency = serializers.CharField(max_length=10, default='USD', required=False)
 
     class Meta:
@@ -60,14 +65,23 @@ class RegisterSerializer(serializers.ModelSerializer):
         )
 
     def validate_email(self, value):
-        if User.objects.filter(email__iexact=value).exists():
+        val = value.strip().lower()
+        if User.objects.filter(email__iexact=val).exists():
             raise serializers.ValidationError("An account with this email address already exists.")
-        return value.lower()
+        return val
 
     def validate_username(self, value):
-        if User.objects.filter(username__iexact=value).exists():
+        val = value.strip()
+        if User.objects.filter(username__iexact=val).exists():
             raise serializers.ValidationError("This username is already taken.")
-        return value
+        return val
+
+    def validate_currency(self, value):
+        val = value.upper().strip()
+        if val not in UserProfile.CURRENCY_SYMBOLS:
+            supported = ', '.join(UserProfile.CURRENCY_SYMBOLS.keys())
+            raise serializers.ValidationError(f"Invalid currency '{value}'. Supported currencies are: {supported}.")
+        return val
 
     def validate(self, attrs):
         if attrs['password'] != attrs['password_confirm']:
@@ -88,7 +102,9 @@ class RegisterSerializer(serializers.ModelSerializer):
         )
 
         # Update profile created via signal
-        profile = user.profile
+        profile = getattr(user, 'profile', None)
+        if not profile:
+            profile = UserProfile.objects.create(user=user)
         profile.role = role
         profile.currency = currency
         profile.save()
@@ -169,6 +185,10 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
 
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
+    default_error_messages = {
+        'no_active_account': 'Invalid username or password. Please try again.'
+    }
+
     def validate(self, attrs):
         data = super().validate(attrs)
         user = self.user

@@ -54,6 +54,68 @@ class AccountsAuthenticationTests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn('password_confirm', response.data)
 
+    def test_registration_duplicate_email(self):
+        self.client.post(self.register_url, self.user_data, format='json')
+        duplicate_email_data = self.user_data.copy()
+        duplicate_email_data['username'] = 'completely_different_user'
+        response = self.client.post(self.register_url, duplicate_email_data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('email', response.data)
+        self.assertIn('already exists', str(response.data['email'][0]))
+
+    def test_registration_invalid_role(self):
+        invalid_role_data = self.user_data.copy()
+        invalid_role_data['role'] = 'unauthorized_role'
+        response = self.client.post(self.register_url, invalid_role_data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('role', response.data)
+
+    def test_registration_invalid_currency(self):
+        invalid_curr_data = self.user_data.copy()
+        invalid_curr_data['currency'] = 'FAKE_CURRENCY'
+        response = self.client.post(self.register_url, invalid_curr_data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('currency', response.data)
+
+    def test_registration_missing_required_fields(self):
+        response = self.client.post(self.register_url, {}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('username', response.data)
+        self.assertIn('email', response.data)
+        self.assertIn('password', response.data)
+
+    def test_registration_followed_by_login(self):
+        reg_response = self.client.post(self.register_url, self.user_data, format='json')
+        self.assertEqual(reg_response.status_code, status.HTTP_201_CREATED)
+
+        login_response = self.client.post(self.login_url, {
+            'username': self.user_data['username'],
+            'password': self.user_data['password'],
+        }, format='json')
+        self.assertEqual(login_response.status_code, status.HTTP_200_OK)
+        self.assertIn('access', login_response.data)
+
+    def test_user_data_isolation(self):
+        # Register user A
+        user_a_data = self.user_data.copy()
+        user_a_data['username'] = 'user_isolation_a'
+        user_a_data['email'] = 'user_a@test.com'
+        reg_a = self.client.post(self.register_url, user_a_data, format='json')
+        token_a = reg_a.data['access']
+
+        # Register user B
+        user_b_data = self.user_data.copy()
+        user_b_data['username'] = 'user_isolation_b'
+        user_b_data['email'] = 'user_b@test.com'
+        reg_b = self.client.post(self.register_url, user_b_data, format='json')
+
+        # User A requests their own profile
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token_a}')
+        profile_res = self.client.get(self.profile_url)
+        self.assertEqual(profile_res.status_code, status.HTTP_200_OK)
+        self.assertEqual(profile_res.data['username'], 'user_isolation_a')
+        self.assertNotEqual(profile_res.data['username'], 'user_isolation_b')
+
     def test_successful_login(self):
         # Register first
         self.client.post(self.register_url, self.user_data, format='json')
@@ -74,6 +136,42 @@ class AccountsAuthenticationTests(TestCase):
         login_payload = {
             'username': 'student_user',
             'password': 'WrongPassword123!',
+        }
+        response = self.client.post(self.login_url, login_payload, format='json')
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertIn('detail', response.data)
+        self.assertEqual(response.data['detail'], 'Invalid username or password. Please try again.')
+
+    def test_login_missing_user(self):
+        login_payload = {
+            'username': 'completely_nonexistent_user',
+            'password': 'SomePassword123!',
+        }
+        response = self.client.post(self.login_url, login_payload, format='json')
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertIn('detail', response.data)
+        self.assertEqual(response.data['detail'], 'Invalid username or password. Please try again.')
+
+    def test_login_empty_credentials(self):
+        # Empty payload
+        response = self.client.post(self.login_url, {}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('username', response.data)
+        self.assertIn('password', response.data)
+
+        # Missing password only
+        response_user_only = self.client.post(self.login_url, {'username': 'test_user'}, format='json')
+        self.assertEqual(response_user_only.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('password', response_user_only.data)
+
+    def test_login_inactive_user(self):
+        user = User.objects.create_user(username='disabled_user', password='DisabledPassword123!')
+        user.is_active = False
+        user.save()
+
+        login_payload = {
+            'username': 'disabled_user',
+            'password': 'DisabledPassword123!',
         }
         response = self.client.post(self.login_url, login_payload, format='json')
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)

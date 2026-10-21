@@ -30,7 +30,17 @@ class RegisterView(APIView):
     def post(self, request):
         serializer = RegisterSerializer(data=request.data)
         if serializer.is_valid():
-            user = serializer.save()
+            try:
+                user = serializer.save()
+            except Exception as e:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.error(f"Registration database exception: {e}")
+                return Response(
+                    {"detail": "Unable to complete registration due to a database error. Please try again."},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
+
             refresh = RefreshToken.for_user(user)
             profile = getattr(user, 'profile', None)
 
