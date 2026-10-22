@@ -266,3 +266,64 @@ class AccountsAuthenticationTests(TestCase):
             'password': 'BrandNewSecurePassword123!',
         }, format='json')
         self.assertEqual(login_res.status_code, status.HTTP_200_OK)
+
+    def test_login_with_email(self):
+        self.client.post(self.register_url, self.user_data, format='json')
+        # Login using email instead of username
+        response = self.client.post(self.login_url, {
+            'username': 'student@budgetbuddy.test',
+            'password': 'StrongPassword123!',
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['user']['username'], 'student_user')
+
+    def test_login_with_case_insensitive_username(self):
+        self.client.post(self.register_url, self.user_data, format='json')
+        response = self.client.post(self.login_url, {
+            'username': 'STUDENT_USER',
+            'password': 'StrongPassword123!',
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['user']['username'], 'student_user')
+
+    def test_login_with_whitespace_username(self):
+        self.client.post(self.register_url, self.user_data, format='json')
+        response = self.client.post(self.login_url, {
+            'username': '  student_user  ',
+            'password': 'StrongPassword123!',
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['user']['username'], 'student_user')
+
+    def test_login_deactivated_account_message(self):
+        self.client.post(self.register_url, self.user_data, format='json')
+        user = User.objects.get(username='student_user')
+        user.is_active = False
+        user.save()
+
+        response = self.client.post(self.login_url, {
+            'username': 'student_user',
+            'password': 'StrongPassword123!',
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertIn('detail', response.data)
+        self.assertIn('deactivated', str(response.data['detail']))
+
+    def test_registration_rejects_admin_role(self):
+        admin_reg = self.user_data.copy()
+        admin_reg['username'] = 'attempted_admin'
+        admin_reg['email'] = 'attempted_admin@budgetbuddy.test'
+        admin_reg['role'] = 'admin'
+        response = self.client.post(self.register_url, admin_reg, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('role', response.data)
+
+    def test_health_check_endpoint(self):
+        response = self.client.get(reverse('health_check'))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('status', response.data)
+        self.assertEqual(response.data['status'], 'healthy')
+        self.assertIn('environment', response.data)
+        self.assertIn('database', response.data)
+        self.assertEqual(response.data['database'], 'connected')
+

@@ -30,6 +30,7 @@ export default function RegisterPage() {
     { code: 'GBP', symbol: '£', name: 'British Pound (£)' },
     { code: 'CAD', symbol: 'C$', name: 'Canadian Dollar (C$)' },
     { code: 'AUD', symbol: 'A$', name: 'Australian Dollar (A$)' },
+    { code: 'JPY', symbol: '¥', name: 'Japanese Yen (¥)' },
   ];
 
   const handleChange = (e) => {

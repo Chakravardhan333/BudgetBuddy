@@ -28,7 +28,16 @@ import dj_database_url
 load_dotenv(BASE_DIR / '.env')
 
 SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-g=2&*5lf63*dbwaanf1jj93fihbsgx*9q#*1=c778%z=au_b_h')
-DEBUG = os.environ.get('DEBUG', 'True').lower() in ('true', '1', 'yes')
+
+# Default DEBUG to False if deployed on Render or connected to remote database, True for local developer convenience
+is_production_deployment = bool(
+    os.environ.get('RENDER')
+    or os.environ.get('RENDER_EXTERNAL_HOSTNAME')
+    or os.environ.get('DATABASE_URL')
+    or os.environ.get('ENVIRONMENT', '').strip().lower() == 'production'
+)
+default_debug_mode = 'False' if is_production_deployment else 'True'
+DEBUG = os.environ.get('DEBUG', default_debug_mode).lower() in ('true', '1', 'yes')
 
 allowed_hosts_env = os.environ.get('ALLOWED_HOSTS', '').strip()
 if allowed_hosts_env == '*':

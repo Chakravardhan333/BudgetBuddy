@@ -29,7 +29,6 @@ class Command(BaseCommand):
 
         student_pwd = os.environ.get('DEMO_STUDENT_PASSWORD', 'BudgetBuddy123!')
         premium_pwd = os.environ.get('DEMO_PREMIUM_PASSWORD', 'BudgetBuddy123!')
-        admin_pwd = os.environ.get('DEMO_ADMIN_PASSWORD', 'BudgetBuddyAdmin123!')
 
         users_to_seed = [
             {
@@ -54,7 +53,12 @@ class Command(BaseCommand):
                 'is_staff': False,
                 'is_superuser': False,
             },
-            {
+        ]
+
+        # NEVER seed administrator account with a predictable password in production
+        if is_debug or is_forced:
+            admin_pwd = os.environ.get('DEMO_ADMIN_PASSWORD', 'BudgetBuddyAdmin123!')
+            users_to_seed.append({
                 'username': 'admin',
                 'email': 'admin@budgetbuddy.app',
                 'password': admin_pwd,
@@ -64,8 +68,11 @@ class Command(BaseCommand):
                 'currency': 'USD',
                 'is_staff': True,
                 'is_superuser': True,
-            },
-        ]
+            })
+        else:
+            self.stdout.write(self.style.WARNING(
+                "Skipping administrator seeding in production for security. Use 'python manage.py createsuperuser' for production administrative accounts."
+            ))
 
         for u in users_to_seed:
             user, created = User.objects.get_or_create(

@@ -1,12 +1,29 @@
 import axios from 'axios';
 
 const getApiBaseUrl = () => {
-  let url = (import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api').trim();
-  url = url.replace(/\/+$/, '');
-  if (!url.endsWith('/api')) {
-    url = `${url}/api`;
+  // 1. If explicitly configured via Vite environment variable, use that
+  const envUrl = import.meta.env.VITE_API_URL;
+  if (envUrl && typeof envUrl === 'string' && envUrl.trim() !== '') {
+    let url = envUrl.trim().replace(/\/+$/, '');
+    if (!url.endsWith('/api')) {
+      url = `${url}/api`;
+    }
+    return url;
   }
-  return url;
+
+  // 2. Detect runtime hostname: If accessing from localhost, target local Django server
+  const isLocalhost =
+    typeof window !== 'undefined' &&
+    (window.location.hostname === 'localhost' ||
+     window.location.hostname === '127.0.0.1' ||
+     window.location.hostname === '0.0.0.0');
+
+  if (isLocalhost) {
+    return 'http://127.0.0.1:8000/api';
+  }
+
+  // 3. Deployed production fallback (e.g. Vercel domain) targets verified Render backend
+  return 'https://budgetbuddy-zg6o.onrender.com/api';
 };
 
 const API_BASE_URL = getApiBaseUrl();

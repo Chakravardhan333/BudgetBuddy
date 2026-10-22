@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
 from django.contrib.auth.password_validation import validate_password
+from django.db.models import Q
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from .models import UserProfile
 
@@ -48,6 +49,8 @@ class RegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=True, validators=[validate_password])
     password_confirm = serializers.CharField(write_only=True, required=True)
     email = serializers.EmailField(required=True)
+    first_name = serializers.CharField(max_length=150, required=False, allow_blank=True)
+    last_name = serializers.CharField(max_length=150, required=False, allow_blank=True)
     role = serializers.ChoiceField(choices=REGISTRATION_ROLE_CHOICES, default='student', required=False)
     currency = serializers.CharField(max_length=10, default='USD', required=False)
 
@@ -66,12 +69,18 @@ class RegisterSerializer(serializers.ModelSerializer):
 
     def validate_email(self, value):
         val = value.strip().lower()
+        if not val:
+            raise serializers.ValidationError("Email address is required.")
         if User.objects.filter(email__iexact=val).exists():
             raise serializers.ValidationError("An account with this email address already exists.")
         return val
 
     def validate_username(self, value):
         val = value.strip()
+        if not val:
+            raise serializers.ValidationError("Username is required.")
+        if len(val) < 3:
+            raise serializers.ValidationError("Username must be at least 3 characters long.")
         if User.objects.filter(username__iexact=val).exists():
             raise serializers.ValidationError("This username is already taken.")
         return val
@@ -92,13 +101,15 @@ class RegisterSerializer(serializers.ModelSerializer):
         validated_data.pop('password_confirm')
         role = validated_data.pop('role', 'student')
         currency = validated_data.pop('currency', 'USD')
+        first_name = validated_data.get('first_name', '').strip()
+        last_name = validated_data.get('last_name', '').strip()
 
         user = User.objects.create_user(
-            username=validated_data['username'],
-            email=validated_data['email'],
+            username=validated_data['username'].strip(),
+            email=validated_data['email'].strip().lower(),
             password=validated_data['password'],
-            first_name=validated_data.get('first_name', ''),
-            last_name=validated_data.get('last_name', ''),
+            first_name=first_name,
+            last_name=last_name,
         )
 
         # Update profile created via signal
@@ -190,6 +201,24 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     }
 
     def validate(self, attrs):
+        raw_username = attrs.get('username', '').strip()
+        raw_password = attrs.get('password', '')
+
+        # Allow login via username or email address (case-insensitive)
+        user_candidate = User.objects.filter(
+            Q(username__iexact=raw_username) | Q(email__iexact=raw_username)
+        ).first()
+
+        if user_candidate:
+            # Check if user exists and password is correct, but account is deactivated
+            if user_candidate.check_password(raw_password) and not user_candidate.is_active:
+                from rest_framework_simplejwt.exceptions import AuthenticationFailed
+                raise AuthenticationFailed('This account has been deactivated. Please contact support.')
+            # Canonicalize username for Django authentication backend
+            attrs['username'] = user_candidate.username
+        else:
+            attrs['username'] = raw_username
+
         data = super().validate(attrs)
         user = self.user
         profile = getattr(user, 'profile', None)
