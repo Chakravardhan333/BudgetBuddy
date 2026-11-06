@@ -73,3 +73,33 @@ def trigger_user_notifications(user):
                         notification_type='info',
                         link='/goals',
                     )
+
+    # 3. Due & Overdue Reminders Checks
+    from .models import Reminder
+    active_reminders = Reminder.objects.filter(
+        user=user,
+        is_completed=False,
+        is_dismissed=False,
+        reminder_datetime__lte=now,
+    )
+    for r in active_reminders:
+        category_title = r.get_category_display()
+        if r.is_overdue:
+            alert_title = f"Overdue Alert: {r.title}"
+            alert_type = 'alert'
+            msg = f"Your {category_title.lower()} '{r.title}' was scheduled for {r.reminder_datetime.strftime('%b %d, %Y at %H:%M')} and is currently overdue."
+        else:
+            alert_title = f"Reminder Due: {r.title}"
+            alert_type = 'warning'
+            msg = f"Your {category_title.lower()} '{r.title}' is due now ({r.reminder_datetime.strftime('%b %d, %Y at %H:%M')})."
+
+        # Deduplicate alerts within the last 24 hours per reminder
+        recent_reminder_cutoff = now - timedelta(hours=24)
+        if not Notification.objects.filter(user=user, title=alert_title, created_at__gte=recent_reminder_cutoff).exists():
+            Notification.objects.create(
+                user=user,
+                title=alert_title,
+                message=msg,
+                notification_type=alert_type,
+                link='/notifications',
+            )
