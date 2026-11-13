@@ -140,8 +140,11 @@ export function ReminderNotificationProvider({ children }) {
 
       if (!list || list.length === 0) return;
 
-      // Only attempt to show notifications if permission is granted
+      // Do not mark reminders as delivered until browser notification permission
+      // is granted. Otherwise a user who grants permission later would never
+      // receive reminders that became due while permission was denied/prompt.
       const canNotify = isSupported && Notification.permission === 'granted';
+      if (!canNotify) return;
 
       for (const reminder of list) {
         // Skip completed or dismissed
