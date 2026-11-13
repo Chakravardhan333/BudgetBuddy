@@ -722,3 +722,8 @@ class WebPushModuleTests(TestCase):
         self.assertIsNotNone(deadline_notif)
         self.assertIn('due in 4 day(s)', deadline_notif.message)
 
+    def test_global_push_dispatch_requires_admin(self):
+        # The dispatcher processes reminders for every user, so regular users
+        # must not be allowed to invoke it through the public API.
+        response = self.client.post(reverse('push_deliver_due'))
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
