@@ -268,11 +268,24 @@ def deliver_scheduled_reminders():
             if send_web_push(sub, payload):
                 sent_count += 1
 
+        # Keep failed reminders eligible for the next scheduled retry.
+        # The row was marked before sending to prevent concurrent workers from
+        # delivering duplicates; revert that claim only when every push failed.
+        if sent_count == 0:
+            Reminder.objects.filter(
+                pk=reminder.pk,
+                notification_delivered=True,
+            ).update(
+                notification_delivered=False,
+                last_notified_at=None,
+            )
+
         results.append({
             "reminder_id": reminder.id,
             "user": reminder.user.username,
             "subscriptions_count": len(subs),
             "delivered_count": sent_count,
+            "delivery_success": sent_count > 0,
         })
 
     logger.info(f"Delivered {len(due_reminders)} scheduled reminders via Web Push: {results}")
