@@ -67,8 +67,8 @@ export function ReminderNotificationProvider({ children }) {
 
   // Deliver an individual browser / desktop notification
   const deliverNotification = useCallback(
-    ({ title, body, tag, data }) => {
-      if (!isSupported || Notification.permission !== 'granted') return null;
+    async ({ title, body, tag, data }) => {
+      if (!isSupported || Notification.permission !== 'granted') return false;
 
       const targetUrl = data?.url || '/notifications?tab=reminders';
       const options = {
@@ -106,22 +106,28 @@ export function ReminderNotificationProvider({ children }) {
         console.warn('Standard Notification constructor failed, attempting Service Worker fallback:', err);
       }
 
-      // Fallback to Service Worker registration if standard constructor was blocked
-      if (!notificationInstance && 'serviceWorker' in navigator && navigator.serviceWorker.controller) {
-        navigator.serviceWorker.ready
-          .then((registration) => {
-            return registration.showNotification(title, options);
-          })
-          .catch((err) => {
-            console.error('Service Worker showNotification error:', err);
-          });
+      // Fall back to the service worker if the page Notification API is blocked.
+      if (!notificationInstance && 'serviceWorker' in navigator) {
+        try {
+          const registration = await navigator.serviceWorker.ready;
+          await registration.showNotification(title, options);
+          if (typeof window !== 'undefined') {
+            window.__active_notification = { title, options, onclick: handleNotificationClick };
+          }
+          return true;
+        } catch (err) {
+          console.error('Service Worker showNotification error:', err);
+          return false;
+        }
       }
+
+      if (!notificationInstance) return false;
 
       if (typeof window !== 'undefined') {
-        window.__active_notification = notificationInstance || { title, options, onclick: handleNotificationClick };
+        window.__active_notification = notificationInstance;
       }
 
-      return notificationInstance || { title, options, onclick: handleNotificationClick };
+      return true;
     },
     [isSupported, navigate]
   );
@@ -165,29 +171,8 @@ export function ReminderNotificationProvider({ children }) {
           continue;
         }
 
-        // 3. Mark as delivered locally immediately to avoid race conditions
-        deliveredSetRef.current.add(dedupeKey);
-        try {
-          localStorage.setItem(storageKey, new Date().toISOString());
-        } catch {
-          // localStorage might be full or disabled
-        }
-
-        // 4. Broadcast to other tabs so they skip immediately
-        if (broadcastChannelRef.current) {
-          try {
-            broadcastChannelRef.current.postMessage({
-              type: 'REMINDER_DELIVERED',
-              dedupeKey,
-              reminderId: reminder.id,
-            });
-          } catch {
-            // Channel error ignored
-          }
-        }
-
-        // 5. Fire the actual browser notification if permission is granted
-        if (canNotify) {
+        // Display the notification before recording its delivery state.
+        {
           const priority = (reminder.priority || 'medium').toUpperCase();
           const scheduledTime = reminder.reminder_datetime
             ? new Date(reminder.reminder_datetime).toLocaleString([], {
@@ -202,7 +187,7 @@ export function ReminderNotificationProvider({ children }) {
           const notificationTitle = 'BudgetBuddy – Financial Reminder';
           const notificationBody = `${reminder.title} – ${description}\nPriority: ${priority} | Due: ${scheduledTime}`;
 
-          const notifResult = deliverNotification({
+          const delivered = await deliverNotification({
             title: notificationTitle,
             body: notificationBody,
             tag: `budgetbuddy-reminder-${dedupeKey}`,
@@ -212,16 +197,37 @@ export function ReminderNotificationProvider({ children }) {
             },
           });
 
+          if (!delivered) continue;
+
+          deliveredSetRef.current.add(dedupeKey);
+          try {
+            localStorage.setItem(storageKey, new Date().toISOString());
+          } catch {
+            // localStorage might be full or disabled
+          }
+
+          if (broadcastChannelRef.current) {
+            try {
+              broadcastChannelRef.current.postMessage({
+                type: 'REMINDER_DELIVERED',
+                dedupeKey,
+                reminderId: reminder.id,
+              });
+            } catch {
+              // Channel error ignored
+            }
+          }
+
           if (typeof window !== 'undefined') {
             window.__last_delivered_reminder = reminder;
             window.__delivered_reminders_count = (window.__delivered_reminders_count || 0) + 1;
-            window.__last_notification_instance = notifResult;
+            window.__last_notification_instance = true;
           }
         }
 
-        // 6. Notify backend of successful delivery for permanent database tracking
+        // Update the backend only after successful browser/service-worker delivery.
         notificationsService.markReminderDelivered(reminder.id).catch(() => {
-          // Silent catch: network glitch won't break the user experience
+          // A transient API failure should not break reminder polling.
         });
       }
     } catch {
