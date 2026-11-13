@@ -6,13 +6,17 @@ from datetime import datetime, timezone
 from django.conf import settings
 from django.db import connection
 
-@api_view(['GET'])
+@api_view(['GET', 'HEAD'])
 @permission_classes([AllowAny])
 def health_check(request):
     """
     Public health check endpoint returning server status, environment,
     database connectivity, system time, and API version.
+    Supports both GET and HEAD requests for uptime monitors and pre-warming pings.
     """
+    if request.method == 'HEAD':
+        return Response(status=200)
+
     # Dynamically determine deployment environment
     env = os.environ.get('ENVIRONMENT')
     if not env:

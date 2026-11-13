@@ -17,6 +17,8 @@ import {
   Loader2,
   Globe
 } from 'lucide-react';
+import WebPushSettingsCard from '../components/common/WebPushSettingsCard';
+
 
 export default function AccountSettingsPage() {
   const { user, updateUserProfile } = useAuth();
@@ -190,7 +192,11 @@ export default function AccountSettingsPage() {
         </div>
       </form>
 
+      {/* Persistent Web Push Notifications Configuration */}
+      <WebPushSettingsCard />
+
       {/* Role & Access Tier */}
+
       <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-xs space-y-4">
         <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
           <Shield className="w-5 h-5 text-slate-700" />

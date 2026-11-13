@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { NavLink, useSearchParams, useNavigate } from 'react-router-dom';
 import { Wallet, Mail, Lock, ArrowRight, ArrowLeft, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
-import { authService } from '../api/client';
+import { authService, prewarmBackend } from '../api/client';
 import budgetBuddyLogo from '../assets/logo.png';
 
 export default function ForgotPasswordPage() {
@@ -14,12 +14,33 @@ export default function ForgotPasswordPage() {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [loadingSeconds, setLoadingSeconds] = useState(0);
   const [submitted, setSubmitted] = useState(false);
   const [resetSuccess, setResetSuccess] = useState(false);
   const [error, setError] = useState(null);
 
+  // Pre-warm backend
+  useEffect(() => {
+    prewarmBackend();
+  }, []);
+
+  // Track loading elapsed seconds
+  useEffect(() => {
+    let interval;
+    if (loading) {
+      setLoadingSeconds(0);
+      interval = setInterval(() => {
+        setLoadingSeconds((s) => s + 1);
+      }, 1000);
+    } else {
+      setLoadingSeconds(0);
+    }
+    return () => clearInterval(interval);
+  }, [loading]);
+
   const handleRequestSubmit = async (e) => {
     e.preventDefault();
+    if (loading) return;
     setError(null);
     setLoading(true);
     try {
@@ -27,6 +48,7 @@ export default function ForgotPasswordPage() {
       setSubmitted(true);
     } catch (err) {
       setError(
+        err.userFacingMessage ||
         err.response?.data?.email?.[0] ||
         err.response?.data?.message ||
         'Unable to process reset request. Please check the email address provided.'
@@ -38,6 +60,7 @@ export default function ForgotPasswordPage() {
 
   const handleConfirmSubmit = async (e) => {
     e.preventDefault();
+    if (loading) return;
     if (newPassword !== confirmPassword) {
       setError('Passwords do not match.');
       return;
@@ -55,6 +78,7 @@ export default function ForgotPasswordPage() {
       setTimeout(() => navigate('/login'), 2500);
     } catch (err) {
       setError(
+        err.userFacingMessage ||
         err.response?.data?.token?.[0] ||
         err.response?.data?.new_password?.[0] ||
         err.response?.data?.message ||
@@ -86,6 +110,13 @@ export default function ForgotPasswordPage() {
             <div className="mb-5 p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs flex items-start gap-2.5">
               <AlertCircle className="w-4 h-4 text-rose-400 flex-shrink-0 mt-0.5" />
               <span>{error}</span>
+            </div>
+          )}
+
+          {loading && loadingSeconds >= 4 && (
+            <div className="mb-5 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs flex items-center gap-2.5 animate-in fade-in">
+              <Loader2 className="w-4 h-4 animate-spin flex-shrink-0 text-amber-400" />
+              <span>Waking up backend server (Render free tier takes ~45s on cold start)... {loadingSeconds}s elapsed</span>
             </div>
           )}
 

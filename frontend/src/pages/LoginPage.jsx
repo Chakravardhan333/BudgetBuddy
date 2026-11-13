@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { prewarmBackend, checkApiHealth } from '../api/client';
 import budgetBuddyLogo from '../assets/logo.png';
-import { Wallet, Lock, User, AlertCircle, ArrowRight, Eye, EyeOff, Loader2, Sparkles } from 'lucide-react';
+import { Wallet, Lock, User, AlertCircle, ArrowRight, Eye, EyeOff, Loader2, Sparkles, RefreshCw } from 'lucide-react';
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -13,6 +14,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [loadingSeconds, setLoadingSeconds] = useState(0);
   const [errorMessage, setErrorMessage] = useState('');
 
   const from = location.state?.from?.pathname || '/dashboard';
@@ -23,8 +25,29 @@ export default function LoginPage() {
      window.location.hostname === '127.0.0.1' ||
      window.location.hostname === '0.0.0.0');
 
+  // Trigger pre-warming ping to wake up Render container as soon as the user visits the page
+  useEffect(() => {
+    prewarmBackend();
+  }, []);
+
+  // Track elapsed time during login submission to show helpful feedback if server is waking up
+  useEffect(() => {
+    let interval;
+    if (loading) {
+      setLoadingSeconds(0);
+      interval = setInterval(() => {
+        setLoadingSeconds((s) => s + 1);
+      }, 1000);
+    } else {
+      setLoadingSeconds(0);
+    }
+    return () => clearInterval(interval);
+  }, [loading]);
+
   const handleSubmit = async (e) => {
-    e.preventDefault();
+    if (e && e.preventDefault) e.preventDefault();
+    if (loading) return; // Prevent duplicate concurrent login requests
+
     if (!username.trim() || !password) {
       setErrorMessage('Please enter both your username and password.');
       return;
@@ -81,9 +104,29 @@ export default function LoginPage() {
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md relative z-10 px-4 sm:px-0">
         <div className="bg-slate-900 py-8 px-6 sm:px-10 rounded-2xl border border-slate-800 shadow-xl">
           {errorMessage && (
-            <div className="mb-6 p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-sm flex items-start gap-2.5 animate-in fade-in">
-              <AlertCircle className="w-5 h-5 flex-shrink-0 text-rose-400 mt-0.5" />
-              <span>{errorMessage}</span>
+            <div className="mb-6 p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-sm flex flex-col gap-2.5 animate-in fade-in">
+              <div className="flex items-start gap-2.5">
+                <AlertCircle className="w-5 h-5 flex-shrink-0 text-rose-400 mt-0.5" />
+                <span>{errorMessage}</span>
+              </div>
+              {errorMessage.toLowerCase().includes('timed out') && (
+                <button
+                  type="button"
+                  onClick={handleSubmit}
+                  disabled={loading}
+                  className="self-start text-xs font-semibold px-3 py-1.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 border border-rose-500/30 flex items-center gap-1.5 transition-colors"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>Retry Sign In</span>
+                </button>
+              )}
+            </div>
+          )}
+
+          {loading && loadingSeconds >= 4 && (
+            <div className="mb-6 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs flex items-center gap-2.5 animate-in fade-in">
+              <Loader2 className="w-4 h-4 animate-spin flex-shrink-0 text-amber-400" />
+              <span>Waking up backend server (Render free tier takes ~45s on cold start)... {loadingSeconds}s elapsed</span>
             </div>
           )}
 

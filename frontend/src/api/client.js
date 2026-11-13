@@ -11,15 +11,22 @@ const getApiBaseUrl = () => {
     return url;
   }
 
-  // 2. Detect runtime hostname: If accessing from localhost, target local Django server
+  // 2. Detect runtime hostname: If accessing from local development, target local Django server
   const isLocalhost =
     typeof window !== 'undefined' &&
     (window.location.hostname === 'localhost' ||
      window.location.hostname === '127.0.0.1' ||
-     window.location.hostname === '0.0.0.0');
+     window.location.hostname === '0.0.0.0' ||
+     window.location.hostname.startsWith('192.168.') ||
+     window.location.hostname.startsWith('10.') ||
+     window.location.hostname.endsWith('.local') ||
+     window.location.port === '5173' ||
+     window.location.port === '3000' ||
+     window.location.port === '5174');
 
   if (isLocalhost) {
-    return 'http://127.0.0.1:8000/api';
+    const host = (window.location.hostname === '0.0.0.0' || !window.location.hostname) ? '127.0.0.1' : window.location.hostname;
+    return `http://${host}:8000/api`;
   }
 
   // 3. Deployed production fallback (e.g. Vercel domain) targets verified Render backend
@@ -33,7 +40,7 @@ const apiClient = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 30000,
+  timeout: 75000, // 75 seconds to comfortably accommodate Render free-tier cold starts (~45-60s)
 });
 
 // Request interceptor: Attach JWT token if present
@@ -124,10 +131,31 @@ apiClient.interceptors.response.use(
   }
 );
 
-// Health check API
-export const checkApiHealth = async () => {
-  const response = await apiClient.get('/health/');
-  return response.data;
+// Health check API with automatic retry & exponential backoff for Render cold starts
+export const checkApiHealth = async (retries = 2, initialDelayMs = 2000) => {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const response = await apiClient.get('/health/', { timeout: 35000 });
+      return { success: true, data: response.data };
+    } catch (err) {
+      if (attempt < retries) {
+        await new Promise((res) => setTimeout(res, initialDelayMs * Math.pow(2, attempt)));
+      } else {
+        return { success: false, error: err };
+      }
+    }
+  }
+};
+
+// Singleton prewarm ping to wake up Render container when user lands on public/auth pages
+let prewarmPromise = null;
+export const prewarmBackend = () => {
+  if (!prewarmPromise) {
+    prewarmPromise = apiClient.get('/health/', { timeout: 75000 })
+      .then((res) => ({ success: true, data: res.data }))
+      .catch((err) => ({ success: false, error: err }));
+  }
+  return prewarmPromise;
 };
 
 // Accounts API Services

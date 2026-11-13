@@ -69,7 +69,19 @@ class ExpenseViewSet(viewsets.ModelViewSet):
             pass
 
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+        expense = serializer.save(user=self.request.user)
+        try:
+            from notifications.models import Notification
+            Notification.objects.create(
+                user=self.request.user,
+                title=f"Expense Added: {expense.category_name or 'General'}",
+                message=f"Expense of {expense.amount:.2f} logged for '{expense.description or expense.category_name or 'Expense'}'.",
+                notification_type='info',
+                category='expenses',
+                link='/expenses'
+            )
+        except Exception:
+            pass
         self._sync_notifications()
 
     def perform_update(self, serializer):
@@ -77,6 +89,18 @@ class ExpenseViewSet(viewsets.ModelViewSet):
         self._sync_notifications()
 
     def perform_destroy(self, instance):
+        try:
+            from notifications.models import Notification
+            Notification.objects.create(
+                user=self.request.user,
+                title="Expense Removed",
+                message=f"Expense of {instance.amount:.2f} for '{instance.description or instance.category_name or 'Expense'}' was deleted.",
+                notification_type='info',
+                category='expenses',
+                link='/expenses'
+            )
+        except Exception:
+            pass
         instance.delete()
         self._sync_notifications()
 
@@ -113,8 +137,44 @@ class IncomeViewSet(viewsets.ModelViewSet):
 
         return qs
 
+    def _sync_notifications(self):
+        try:
+            from notifications.services import trigger_user_notifications
+            trigger_user_notifications(self.request.user)
+        except Exception:
+            pass
+
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+        income = serializer.save(user=self.request.user)
+        try:
+            from notifications.models import Notification
+            Notification.objects.create(
+                user=self.request.user,
+                title=f"Income Recorded: {income.source}",
+                message=f"Income of {income.amount:.2f} from {income.source} received.",
+                notification_type='success',
+                category='payments',
+                link='/income'
+            )
+        except Exception:
+            pass
+        self._sync_notifications()
+
+    def perform_destroy(self, instance):
+        try:
+            from notifications.models import Notification
+            Notification.objects.create(
+                user=self.request.user,
+                title="Income Entry Removed",
+                message=f"Income of {instance.amount:.2f} ({instance.source}) was deleted.",
+                notification_type='info',
+                category='payments',
+                link='/income'
+            )
+        except Exception:
+            pass
+        instance.delete()
+        self._sync_notifications()
 
 
 class BudgetViewSet(viewsets.ModelViewSet):
@@ -188,6 +248,18 @@ class SavingsGoalViewSet(viewsets.ModelViewSet):
                 date=contribution_date,
                 notes=notes
             )
+            try:
+                from notifications.models import Notification
+                Notification.objects.create(
+                    user=request.user,
+                    title=f"Goal Contribution: {goal.title}",
+                    message=f"Contributed {contribution.amount:.2f} to '{goal.title}'. Total saved: {goal.current_amount:.2f}/{goal.target_amount:.2f}.",
+                    notification_type='success',
+                    category='payments',
+                    link='/goals'
+                )
+            except Exception:
+                pass
 
         self._sync_notifications()
 

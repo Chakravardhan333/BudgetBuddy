@@ -1,8 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { notificationsService } from '../../api/notifications';
+import { useGlobalReminderAlerts } from '../../hooks/useGlobalReminderAlerts';
+import NotificationPermissionBadge from '../common/NotificationPermissionBadge';
+import NotificationCenterDropdown from '../common/NotificationCenterDropdown';
 import LiveClock from '../common/LiveClock';
+
 import budgetBuddyLogo from '../../assets/logo.png';
 import {
   Wallet,
@@ -33,24 +37,33 @@ export default function AppLayout() {
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
 
+  // Global browser reminder alerts monitoring active across all pages
+  const { permission: notifPermission, requestPermission: handleRequestNotifPermission } =
+    useGlobalReminderAlerts(Boolean(user));
+
+  const checkUnread = useCallback(async () => {
+    try {
+      const data = await notificationsService.getUnreadCount();
+      setUnreadCount(data.unread_count || 0);
+    } catch {
+      // Silently skip if network error
+    }
+  }, []);
+
   useEffect(() => {
-    const checkUnread = async () => {
-      try {
-        const data = await notificationsService.getUnreadCount();
-        setUnreadCount(data.unread_count || 0);
-      } catch {
-        // Silently skip if network error
-      }
-    };
     checkUnread();
+
+    const interval = setInterval(checkUnread, 30000);
 
     window.addEventListener('notifications:updated', checkUnread);
     window.addEventListener('finance:mutation', checkUnread);
     return () => {
+      clearInterval(interval);
       window.removeEventListener('notifications:updated', checkUnread);
       window.removeEventListener('finance:mutation', checkUnread);
     };
-  }, [location.pathname]);
+  }, [location.pathname, checkUnread]);
+
 
   const handleLogout = async () => {
     await logout();
@@ -170,7 +183,13 @@ export default function AppLayout() {
                   }`}
                 >
                   <Icon className={`w-4 h-4 ${isActive ? 'text-slate-950' : 'text-slate-400'}`} />
-                  <span>{item.name}</span>
+                  <span className="flex-1">{item.name}</span>
+                  {item.path === '/notifications' && unreadCount > 0 && (
+                    <span className="px-1.5 py-0.5 rounded-full bg-rose-500 text-white font-bold text-[10px] leading-none">
+                      {unreadCount > 9 ? '9+' : unreadCount}
+                    </span>
+                  )}
+
                 </NavLink>
               );
             })}
@@ -196,7 +215,13 @@ export default function AppLayout() {
                   }`}
                 >
                   <Icon className={`w-4 h-4 ${isActive ? 'text-slate-950' : 'text-slate-400'}`} />
-                  <span>{item.name}</span>
+                  <span className="flex-1">{item.name}</span>
+                  {item.path === '/notifications' && unreadCount > 0 && (
+                    <span className="px-1.5 py-0.5 rounded-full bg-rose-500 text-white font-bold text-[10px] leading-none">
+                      {unreadCount > 9 ? '9+' : unreadCount}
+                    </span>
+                  )}
+
                 </NavLink>
               );
             })}
@@ -238,7 +263,13 @@ export default function AppLayout() {
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5 sm:gap-3">
+            {/* Desktop Notification Permission Indicator */}
+            <NotificationPermissionBadge
+              permission={notifPermission}
+              onRequestPermission={handleRequestNotifPermission}
+            />
+
             {/* Real-time Clock Component */}
             <LiveClock />
 
@@ -248,19 +279,9 @@ export default function AppLayout() {
               <span>{user?.currency || 'USD'} ({user?.currency_symbol || '$'})</span>
             </div>
 
-            {/* Notifications Shortcut */}
-            <NavLink
-              to="/notifications"
-              className="p-2 rounded-full text-slate-600 hover:bg-slate-100 relative transition-colors"
-              title="Notifications"
-            >
-              <Bell className="w-5 h-5" />
-              {unreadCount > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-rose-500 text-white font-bold text-[10px] flex items-center justify-center ring-2 ring-white">
-                  {unreadCount > 9 ? '9+' : unreadCount}
-                </span>
-              )}
-            </NavLink>
+            {/* Smart Notification Center Dropdown */}
+            <NotificationCenterDropdown unreadCount={unreadCount} onCountChange={checkUnread} />
+
 
             {/* User Dropdown */}
             <div className="relative">

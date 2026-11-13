@@ -253,3 +253,32 @@ SIMPLE_JWT = {
     'BLACKLIST_AFTER_ROTATION': False,
     'AUTH_HEADER_TYPES': ('Bearer',),
 }
+
+# Web Push / VAPID Configuration
+VAPID_PUBLIC_KEY = os.environ.get(
+    'VAPID_PUBLIC_KEY',
+    'BM28UbFQvG7jBZcix5NqcfdvDy4BO4uhkFMtW9J5PoDYh96bTDzWA0c-MgXGSbZelsqFjv2L1y9YEJ_FcckuZs4'
+)
+VAPID_PRIVATE_KEY = os.environ.get(
+    'VAPID_PRIVATE_KEY',
+    'TrHOdcwwGFaO4P8rvcWHJyLsqNYGgvi3bigOChRPynU'
+)
+VAPID_ADMIN_EMAIL = os.environ.get(
+    'VAPID_ADMIN_EMAIL',
+    'mailto:support@budgetbuddy.app'
+)
+
+# Celery Configuration
+CELERY_BROKER_URL = os.environ.get('CELERY_BROKER_URL', 'redis://localhost:6379/0')
+CELERY_RESULT_BACKEND = os.environ.get('CELERY_RESULT_BACKEND', 'redis://localhost:6379/0')
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = TIME_ZONE
+CELERY_BEAT_SCHEDULE = {
+    'deliver-due-reminders': {
+        'task': 'notifications.tasks.deliver_due_reminders_task',
+        'schedule': 30.0,
+    },
+}
+

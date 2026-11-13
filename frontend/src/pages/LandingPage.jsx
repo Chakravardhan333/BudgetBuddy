@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
+import { prewarmBackend } from '../api/client';
 import budgetBuddyLogo from '../assets/logo.png';
 import {
   Wallet,
@@ -28,6 +29,11 @@ import {
 } from 'lucide-react';
 
 export default function LandingPage() {
+  // Pre-warm Render backend as soon as user opens the landing page
+  useEffect(() => {
+    prewarmBackend();
+  }, []);
+
   const features = [
     {
       title: 'Expense Tracking',

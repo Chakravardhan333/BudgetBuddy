@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { financeService } from '../api/finance';
+import { notificationsService } from '../api/notifications';
 import { useRealTimePolling } from '../hooks/useRealTimePolling';
 import { formatCurrency, formatDate, formatDateTime } from '../utils/formatters';
 import {
@@ -17,13 +18,25 @@ import {
   FileSpreadsheet,
   AlertTriangle,
   RotateCw,
-  Calendar
+  Calendar,
+  Bell,
+  CalendarClock,
+  AlertCircle,
+  Timer,
+  CheckCircle2
 } from 'lucide-react';
 
 export default function DashboardPage() {
   const { user } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
   const [timeframe, setTimeframe] = useState('this_month'); // today | this_week | this_month | this_year | lifetime
+
+  const [reminderSummary, setReminderSummary] = useState({
+    active: 0,
+    due: 0,
+    upcoming: 0,
+    completed: 0,
+  });
 
   const [data, setData] = useState({
     balance: 0.0,
@@ -52,8 +65,14 @@ export default function DashboardPage() {
 
   const fetchDashboardData = async () => {
     try {
-      const res = await financeService.getDashboardSummary();
+      const [res, remSummary] = await Promise.all([
+        financeService.getDashboardSummary(),
+        notificationsService.getReminderSummary().catch(() => null),
+      ]);
       setData(res);
+      if (remSummary) {
+        setReminderSummary(remSummary);
+      }
     } catch (err) {
       console.error("Failed to load live dashboard metrics:", err);
     }
@@ -353,6 +372,66 @@ export default function DashboardPage() {
             <NavLink to="/goals" className="text-blue-600 hover:underline">
               Manage goals &rarr;
             </NavLink>
+          </div>
+        </div>
+      </div>
+
+      {/* Smart Reminders Real-Time Overview Banner */}
+      <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-100 gap-3">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+              <CalendarClock className="w-4 h-4" />
+            </div>
+            <div>
+              <h2 className="text-sm font-bold text-slate-900">Smart Financial Reminders</h2>
+              <p className="text-xs text-slate-500">Scheduled bill payments, savings targets, and financial alerts</p>
+            </div>
+          </div>
+          <NavLink
+            to="/notifications?tab=reminders"
+            className="text-xs font-semibold text-emerald-600 hover:text-emerald-500 flex items-center gap-1 self-start sm:self-auto"
+          >
+            <span>Open Reminders</span>
+            <ChevronRight className="w-3.5 h-3.5" />
+          </NavLink>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-4">
+          <div className="p-3 rounded-xl bg-slate-50 border border-slate-100">
+            <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
+              <span>Active Reminders</span>
+              <CalendarClock className="w-3.5 h-3.5 text-emerald-600" />
+            </div>
+            <div className="mt-1 text-xl font-bold text-slate-900">{reminderSummary.active || 0}</div>
+          </div>
+
+          <div className={`p-3 rounded-xl border ${
+            (reminderSummary.due || 0) > 0 ? 'bg-rose-50 border-rose-200' : 'bg-slate-50 border-slate-100'
+          }`}>
+            <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
+              <span className={(reminderSummary.due || 0) > 0 ? 'text-rose-700 font-semibold' : ''}>Due Now</span>
+              <AlertCircle className={`w-3.5 h-3.5 ${(reminderSummary.due || 0) > 0 ? 'text-rose-600' : 'text-slate-400'}`} />
+            </div>
+            <div className={`mt-1 text-xl font-bold ${(reminderSummary.due || 0) > 0 ? 'text-rose-600' : 'text-slate-900'}`}>
+              {reminderSummary.due || 0}
+            </div>
+          </div>
+
+          <div className="p-3 rounded-xl bg-slate-50 border border-slate-100">
+            <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
+              <span>Upcoming (48h)</span>
+              <Timer className="w-3.5 h-3.5 text-blue-600" />
+            </div>
+            <div className="mt-1 text-xl font-bold text-blue-600">{reminderSummary.upcoming || 0}</div>
+          </div>
+
+          <div className="p-3 rounded-xl bg-slate-50 border border-slate-100">
+            <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
+              <span>Completed</span>
+              <CheckCircle2 className="w-3.5 h-3.5 text-slate-500" />
+            </div>
+            <div className="mt-1 text-xl font-bold text-slate-600">{reminderSummary.completed || 0}</div>
           </div>
         </div>
       </div>
