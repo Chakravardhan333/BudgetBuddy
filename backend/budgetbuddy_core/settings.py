@@ -255,14 +255,10 @@ SIMPLE_JWT = {
 }
 
 # Web Push / VAPID Configuration
-VAPID_PUBLIC_KEY = os.environ.get(
-    'VAPID_PUBLIC_KEY',
-    'BM28UbFQvG7jBZcix5NqcfdvDy4BO4uhkFMtW9J5PoDYh96bTDzWA0c-MgXGSbZelsqFjv2L1y9YEJ_FcckuZs4'
-)
-VAPID_PRIVATE_KEY = os.environ.get(
-    'VAPID_PRIVATE_KEY',
-    'TrHOdcwwGFaO4P8rvcWHJyLsqNYGgvi3bigOChRPynU'
-)
+# VAPID credentials must be configured as deployment environment variables.
+# Never commit private VAPID keys to source control.
+VAPID_PUBLIC_KEY = os.environ.get('VAPID_PUBLIC_KEY', '').strip()
+VAPID_PRIVATE_KEY = os.environ.get('VAPID_PRIVATE_KEY', '').strip()
 VAPID_ADMIN_EMAIL = os.environ.get(
     'VAPID_ADMIN_EMAIL',
     'mailto:support@budgetbuddy.app'
