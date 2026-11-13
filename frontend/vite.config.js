@@ -2,7 +2,9 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
-// https://vite.dev/config/
+// Let Vite 8 / Rolldown manage dependency chunking.
+// Custom output.manualChunks is deprecated in Vite 8 and was isolating
+// Axios into a separate network-vendor chunk that crashes at runtime.
 export default defineConfig({
   plugins: [
     react(),
@@ -14,25 +16,5 @@ export default defineConfig({
   },
   build: {
     chunkSizeWarningLimit: 600,
-    rollupOptions: {
-      output: {
-        manualChunks(id) {
-          if (id.includes('node_modules')) {
-            if (id.includes('recharts')) {
-              return 'recharts-vendor';
-            }
-            if (id.includes('lucide-react')) {
-              return 'icons-vendor';
-            }
-            if (id.includes('react') || id.includes('react-dom') || id.includes('react-router-dom')) {
-              return 'react-vendor';
-            }
-            if (id.includes('axios')) {
-              return 'network-vendor';
-            }
-          }
-        },
-      },
-    },
   },
 })
