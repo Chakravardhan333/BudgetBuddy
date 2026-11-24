@@ -544,7 +544,12 @@ class TestEmailDeliveryView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        if not settings.EMAIL_HOST_USER or not settings.EMAIL_HOST_PASSWORD:
+        if (
+            settings.EMAIL_BACKEND != 'django.core.mail.backends.smtp.EmailBackend'
+            or not settings.EMAIL_HOST_USER
+            or not settings.EMAIL_HOST_PASSWORD
+            or not settings.EMAIL_HOST
+        ):
             return Response(
                 {"success": False, "message": "Email delivery is not configured on the server."},
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
