@@ -73,3 +73,43 @@ def send_msg91_test_sms(phone_number):
     except Exception:
         logger.exception("Unexpected MSG91 test SMS error")
     return {"success": False, "message": "Could not send the test SMS. Check MSG91 configuration and server logs."}
+
+
+
+def send_msg91_reminder_sms(phone_number, title, message):
+    """Send one opted-in reminder SMS using the configured approved MSG91 Flow template."""
+    auth_key = os.environ.get("MSG91_AUTH_KEY", "").strip()
+    template_id = os.environ.get("MSG91_TEMPLATE_ID", "").strip()
+    country_code = re.sub(r"\\D", "", os.environ.get("MSG91_COUNTRY_CODE", "91"))
+    if not auth_key or not template_id:
+        return False
+    digits = re.sub(r"\\D", "", phone_number or "")
+    if digits.startswith("0"):
+        digits = digits.lstrip("0")
+    if country_code and not digits.startswith(country_code):
+        digits = country_code + digits
+    if len(digits) < 10 or len(digits) > 15:
+        return False
+    payload = {
+        "template_id": template_id,
+        "short_url": "0",
+        "recipients": [{
+            "mobiles": digits,
+            "var1": str(title)[:60],
+            "var2": str(message or "Your BudgetBuddy reminder is due.")[:120],
+        }],
+    }
+    request = Request(
+        "https://control.msg91.com/api/v5/flow/",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"accept": "application/json", "content-type": "application/json", "authkey": auth_key},
+        method="POST",
+    )
+    try:
+        with urlopen(request, timeout=15) as response:
+            data = response.read().decode("utf-8", errors="replace")
+            result = json.loads(data) if data else {}
+            return 200 <= response.status < 300 and str(result.get("type", "")).lower() not in {"error", "failure"}
+    except Exception as exc:
+        logger.warning("MSG91 reminder delivery failed: %s", type(exc).__name__)
+        return False
