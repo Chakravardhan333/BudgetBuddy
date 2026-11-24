@@ -184,7 +184,7 @@ def build_budgetbuddy_email_html(title, message, category="system", cta_url="/da
     }
     accent, tint, label = palette.get(category, palette["system"])
     safe_title = escape(str(title or "Your financial update"))
-    safe_message = escape(str(message or "")).replace("\\n", "<br>")
+    safe_message = escape(str(message or "")).replace("\n", "<br>")
     frontend_url = os.environ.get("FRONTEND_URL", "https://budget-buddy-sigma-two.vercel.app").rstrip("/")
     safe_url = escape(frontend_url + (cta_url if str(cta_url).startswith("/") else "/dashboard"), quote=True)
     safe_cta = escape(str(cta_label))
@@ -236,6 +236,6 @@ def send_notification_email(notification):
     return send_brevo_email(
         to_email=recipient,
         subject=f"BudgetBuddy: {notification.title}",
-        text_content=f"{notification.title}\\n\\n{notification.message}\\n\\nOpen BudgetBuddy: {frontend_url}{link}",
+        text_content=f"{notification.title}\n\n{notification.message}\n\nOpen BudgetBuddy: {frontend_url}{link}",
         html_content=html_content,
     )
