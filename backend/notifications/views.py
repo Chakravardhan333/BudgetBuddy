@@ -8,7 +8,7 @@ import logging
 from .models import Notification, Reminder, PushSubscription
 from .serializers import NotificationSerializer, ReminderSerializer, PushSubscriptionSerializer
 from .services import trigger_user_notifications, send_test_push, deliver_scheduled_reminders
-from .delivery import send_brevo_email
+from .delivery import send_brevo_email, build_budgetbuddy_email_html
 
 
 class NotificationListView(APIView):
@@ -553,12 +553,21 @@ class TestEmailDeliveryView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        test_message = (
+            "Your email notification connection is working. "
+            "BudgetBuddy can now send you expense updates, budget alerts, savings milestones, "
+            "and important account notifications."
+        )
         result = send_brevo_email(
             to_email=recipient,
-            subject="BudgetBuddy email delivery test",
-            text_content=(
-                "Hello! This is a test email from BudgetBuddy. "
-                "Your email notification connection is working."
+            subject="Your BudgetBuddy email notifications are ready",
+            text_content=f"Hello!\\n\\n{test_message}\\n\\nOpen BudgetBuddy to review your finances.",
+            html_content=build_budgetbuddy_email_html(
+                title="Your email notifications are ready!",
+                message=test_message,
+                category="system",
+                cta_url="/settings",
+                cta_label="Open BudgetBuddy",
             ),
         )
         if not result.get("success"):
