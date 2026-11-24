@@ -65,6 +65,8 @@ class Reminder(models.Model):
     is_dismissed = models.BooleanField(default=False)
     snooze_count = models.PositiveIntegerField(default=0)
     notification_delivered = models.BooleanField(default=False)
+    email_delivered = models.BooleanField(default=False)
+    sms_delivered = models.BooleanField(default=False)
     last_notified_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 

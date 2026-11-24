@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import apiClient from '../api/client';
 import {
   User,
   Mail,
@@ -21,7 +22,8 @@ export default function ProfilePage() {
     first_name: user?.first_name || '',
     last_name: user?.last_name || '',
     email: user?.email || '',
-    phone_number: user?.phone_number || '',
+    phone_number: user?.phone_number || user?.profile?.phone_number || '',
+    sms_notifications_enabled: user?.profile?.sms_notifications_enabled ?? user?.sms_notifications_enabled ?? false,
     bio: user?.bio || '',
     currency: user?.currency || 'USD',
   });
@@ -29,6 +31,9 @@ export default function ProfilePage() {
   const [profileLoading, setProfileLoading] = useState(false);
   const [profileSuccess, setProfileSuccess] = useState('');
   const [profileError, setProfileError] = useState('');
+  const [channelTestLoading, setChannelTestLoading] = useState('');
+  const [channelTestMessage, setChannelTestMessage] = useState('');
+  const [channelTestError, setChannelTestError] = useState('');
 
   // Password Form State
   const [passwordData, setPasswordData] = useState({
@@ -72,6 +77,26 @@ export default function ProfilePage() {
       setProfileSuccess('Profile details and currency updated successfully!');
     } else {
       setProfileError('Failed to update profile. Please check your inputs.');
+    }
+  };
+
+  const handleChannelTest = async (channel) => {
+    setChannelTestLoading(channel);
+    setChannelTestMessage('');
+    setChannelTestError('');
+    try {
+      const endpoint = channel === 'email' ? '/notifications/email/test/' : '/notifications/sms/test/';
+      const payload = channel === 'sms' ? { confirm_consent: true } : {};
+      const response = await apiClient.post(endpoint, payload);
+      setChannelTestMessage(response.data?.message || `Test ${channel} request accepted.`);
+    } catch (err) {
+      setChannelTestError(
+        err.response?.data?.message ||
+        err.response?.data?.detail ||
+        `Could not send the test ${channel}. Check the server configuration and try again.`
+      );
+    } finally {
+      setChannelTestLoading('');
     }
   };
 
@@ -207,6 +232,61 @@ export default function ProfilePage() {
                 className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:border-emerald-500 focus:bg-white text-sm"
               />
             </div>
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                name="sms_notifications_enabled"
+                checked={Boolean(profileData.sms_notifications_enabled)}
+                onChange={(e) => {
+                  setProfileData((prev) => ({
+                    ...prev,
+                    sms_notifications_enabled: e.target.checked,
+                  }));
+                  setProfileSuccess('');
+                  setProfileError('');
+                }}
+                className="mt-0.5 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+              />
+              <span>
+                <span className="block text-sm font-semibold text-slate-800">Receive reminder alerts by SMS</span>
+                <span className="block text-xs text-slate-500 mt-1">
+                  I agree to receive BudgetBuddy reminder SMS messages at the phone number above. SMS delivery may incur carrier charges. You can turn this off at any time.
+                </span>
+              </span>
+            </label>
+          </div>
+
+          <div className="mt-4 rounded-xl border border-slate-200 p-4">
+            <h3 className="text-sm font-semibold text-slate-800">Test notification delivery</h3>
+            <p className="mt-1 text-xs text-slate-500">
+              Save your profile first. These buttons send one test message to your own saved email address or phone number.
+            </p>
+            {channelTestMessage && <p role="status" className="mt-3 text-sm text-emerald-700">{channelTestMessage}</p>}
+            {channelTestError && <p role="alert" className="mt-3 text-sm text-rose-700">{channelTestError}</p>}
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => handleChannelTest('email')}
+                disabled={Boolean(channelTestLoading) || !profileData.email.trim()}
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {channelTestLoading === 'email' ? 'Sending email…' : 'Send test email'}
+              </button>
+              <button
+                type="button"
+                onClick={() => handleChannelTest('sms')}
+                disabled={Boolean(channelTestLoading) || !profileData.phone_number.trim() || !profileData.sms_notifications_enabled}
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {channelTestLoading === 'sms' ? 'Sending SMS…' : 'Send test SMS'}
+              </button>
+            </div>
+            <p className="mt-2 text-xs text-slate-500">
+              SMS testing requires your SMS consent checkbox to be selected and MSG91 to be configured by the service administrator.
+            </p>
           </div>
 
           <div>

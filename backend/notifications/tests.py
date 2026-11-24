@@ -1,4 +1,4 @@
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.contrib.auth.models import User
 from django.urls import reverse
 from rest_framework.test import APIClient
@@ -458,6 +458,7 @@ class WebPushModuleTests(TestCase):
             username='other_user', email='other@budgetbuddy.test', password='Password123!'
         )
 
+    @override_settings(VAPID_PUBLIC_KEY='test-public-vapid-key-for-unit-tests')
     def test_vapid_public_key_endpoint(self):
         res = self.client.get(reverse('push_vapid_key'))
         self.assertEqual(res.status_code, status.HTTP_200_OK)
@@ -626,6 +627,7 @@ class WebPushModuleTests(TestCase):
         self.assertFalse(r.notification_delivered)
         self.assertEqual(r.snooze_count, 1)
 
+    @override_settings(VAPID_PRIVATE_KEY='test-private-vapid-key-for-unit-tests')
     def test_expired_subscription_auto_cleanup(self):
         from pywebpush import WebPushException
         from unittest.mock import patch, MagicMock

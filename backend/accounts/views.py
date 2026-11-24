@@ -58,6 +58,8 @@ class RegisterView(APIView):
                     "role": profile.role if profile else "student",
                     "currency": profile.currency if profile else "USD",
                     "currency_symbol": profile.currency_symbol if profile else "$",
+                    "phone_number": (profile.phone_number or "") if profile else "",
+                    "sms_notifications_enabled": profile.sms_notifications_enabled if profile else False,
                     "is_staff": user.is_staff,
                     "is_superuser": user.is_superuser,
                 }

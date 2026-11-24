@@ -13,6 +13,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
             'currency',
             'currency_symbol',
             'phone_number',
+            'sms_notifications_enabled',
             'bio',
             'monthly_budget_target',
             'created_at',
@@ -128,6 +129,7 @@ class ProfileUpdateSerializer(serializers.Serializer):
     last_name = serializers.CharField(max_length=150, required=False, allow_blank=True)
     email = serializers.EmailField(required=False)
     phone_number = serializers.CharField(max_length=20, required=False, allow_blank=True)
+    sms_notifications_enabled = serializers.BooleanField(required=False)
     bio = serializers.CharField(required=False, allow_blank=True)
     currency = serializers.CharField(max_length=10, required=False)
     monthly_budget_target = serializers.DecimalField(max_digits=12, decimal_places=2, required=False)
@@ -154,6 +156,8 @@ class ProfileUpdateSerializer(serializers.Serializer):
         # Update UserProfile fields
         if 'phone_number' in validated_data:
             profile.phone_number = validated_data['phone_number']
+        if 'sms_notifications_enabled' in validated_data:
+            profile.sms_notifications_enabled = validated_data['sms_notifications_enabled']
         if 'bio' in validated_data:
             profile.bio = validated_data['bio']
         if 'currency' in validated_data:
@@ -210,11 +214,10 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         ).first()
 
         if user_candidate:
-            # Check if user exists and password is correct, but account is deactivated
+            # Check if user exists and password is correct but account is deactivated
             if user_candidate.check_password(raw_password) and not user_candidate.is_active:
                 from rest_framework_simplejwt.exceptions import AuthenticationFailed
                 raise AuthenticationFailed('This account has been deactivated. Please contact support.')
-            # Canonicalize username for Django authentication backend
             attrs['username'] = user_candidate.username
         else:
             attrs['username'] = raw_username
@@ -232,7 +235,9 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             'full_name': f"{user.first_name} {user.last_name}".strip() or user.username,
             'role': profile.role if profile else 'student',
             'currency': profile.currency if profile else 'USD',
-            'currency_symbol': profile.currency_symbol if profile else '$',
+            'currency_symbol': profile.currency_symbol if profile else "$",
+            'phone_number': (profile.phone_number or "") if profile else "",
+            'sms_notifications_enabled': profile.sms_notifications_enabled if profile else False,
             'is_staff': user.is_staff,
             'is_superuser': user.is_superuser,
         }

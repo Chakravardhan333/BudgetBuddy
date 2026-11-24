@@ -2,7 +2,9 @@ from datetime import date, timedelta
 from decimal import Decimal
 from django.db.models import Sum
 from django.utils import timezone
+from django.core.mail import send_mail
 from .models import Notification
+from .delivery import send_msg91_reminder_sms
 from transactions.models import Budget, Expense, SavingsGoal
 
 def trigger_user_notifications(user):
@@ -207,89 +209,149 @@ def send_web_push(subscription, payload):
 
 def deliver_scheduled_reminders():
     """
-    Finds due reminders for users with active push subscriptions, locks them atomically
-    to prevent duplicate delivery across concurrent workers, marks them delivered,
-    and sends Web Push notifications.
+    Deliver due reminders independently through Web Push, email, and opted-in SMS.
+    Per-channel flags prevent successful channels from being resent when another
+    channel fails and is retried by Celery.
     """
+    import os
+    from django.db.models import Q
     from .models import Reminder
+
     now = timezone.now()
-    due_reminders = []
-
-    # 1. Atomically lock and mark delivered so concurrent workers never process the same reminder
-    with transaction.atomic():
-        locked_qs = Reminder.objects.select_for_update(skip_locked=True).filter(
-            user__push_subscriptions__isnull=False,
-            is_completed=False,
-            is_dismissed=False,
-            notification_delivered=False,
-            reminder_datetime__lte=now,
-        ).distinct()
-
-        due_reminders = list(locked_qs)
-        for reminder in due_reminders:
-            reminder.notification_delivered = True
-            reminder.last_notified_at = now
-            reminder.save(update_fields=['notification_delivered', 'last_notified_at'])
-
-    if not due_reminders:
-        return {"processed": 0, "results": []}
-
-    # 2. Dispatch push notifications to each subscription
     results = []
-    for reminder in due_reminders:
-        # Ensure persistent in-app notification record exists
-        alert_title = f"Reminder Due: {reminder.title}"
-        if not Notification.objects.filter(user=reminder.user, title=alert_title, created_at__gte=reminder.reminder_datetime).exists():
+    smtp_ready = (
+        getattr(settings, "EMAIL_BACKEND", "") == "django.core.mail.backends.smtp.EmailBackend"
+        and bool(getattr(settings, "EMAIL_HOST", ""))
+        and bool(getattr(settings, "EMAIL_HOST_USER", ""))
+        and bool(getattr(settings, "EMAIL_HOST_PASSWORD", ""))
+    )
+    msg91_ready = bool(os.environ.get("MSG91_AUTH_KEY", "").strip() and os.environ.get("MSG91_TEMPLATE_ID", "").strip())
+
+    # Restrict the queue to reminders with at least one enabled, unfinished
+    # channel. This prevents older reminders with no enabled channel from
+    # occupying the bounded batch and starving newer reminders.
+    eligible = Q(pk__in=[])
+    if smtp_ready:
+        eligible |= Q(email_delivered=False, user__email__gt="")
+    if msg91_ready:
+        eligible |= Q(
+            sms_delivered=False,
+            user__profile__sms_notifications_enabled=True,
+            user__profile__phone_number__gt="",
+        )
+    eligible |= Q(
+        notification_delivered=False,
+        user__push_subscriptions__isnull=False,
+    )
+    due_ids = list(Reminder.objects.filter(
+        eligible,
+        is_completed=False,
+        is_dismissed=False,
+        reminder_datetime__lte=now,
+    ).order_by("reminder_datetime").values_list("id", flat=True).distinct()[:500])
+
+    for reminder_id in due_ids:
+        # Lock and claim only channels that are configured and eligible.
+        with transaction.atomic():
+            reminder = Reminder.objects.select_for_update().select_related("user", "user__profile").filter(pk=reminder_id).first()
+            if not reminder or reminder.is_completed or reminder.is_dismissed:
+                continue
+
+            subs = list(PushSubscription.objects.filter(user=reminder.user))
+            profile = getattr(reminder.user, "profile", None)
+            email_due = smtp_ready and bool((reminder.user.email or "").strip()) and not reminder.email_delivered
+            sms_due = (
+                msg91_ready
+                and bool(profile and profile.sms_notifications_enabled)
+                and bool(profile.phone_number)
+                and not reminder.sms_delivered
+            )
+            push_due = bool(subs) and not reminder.notification_delivered
+
+            if not (email_due or sms_due or push_due):
+                continue
+
+            if email_due:
+                reminder.email_delivered = True  # temporary claim; reset if provider fails
+            if sms_due:
+                reminder.sms_delivered = True
+            if push_due:
+                reminder.notification_delivered = True
+            reminder.last_notified_at = now
+            reminder.save(update_fields=[
+                "email_delivered", "sms_delivered", "notification_delivered", "last_notified_at"
+            ])
+
+        title = f"Reminder Due: {reminder.title}"
+        body_text = (reminder.message or f"Your reminder '{reminder.title}' is due.").strip()
+        # Keep the in-app notification record independent from outbound delivery.
+        if not Notification.objects.filter(
+            user=reminder.user, title=title, created_at__gte=reminder.reminder_datetime
+        ).exists():
             Notification.objects.create(
                 user=reminder.user,
-                title=alert_title,
-                message=reminder.message or f"Your reminder '{reminder.title}' is due.",
-                notification_type='alert' if reminder.priority in ('high', 'urgent') else 'warning',
-                category='reminders',
-                link='/notifications?tab=reminders',
+                title=title,
+                message=body_text,
+                notification_type="alert" if reminder.priority in ("high", "urgent") else "warning",
+                category="reminders",
+                link="/notifications?tab=reminders",
             )
 
-        subs = list(PushSubscription.objects.filter(user=reminder.user))
-        body_text = f"{reminder.title} – {reminder.message or 'Your scheduled reminder is due.'}".strip()
-        payload = {
-            "title": "BudgetBuddy – Financial Reminder",
-            "body": body_text,
-            "id": reminder.id,
-            "priority": reminder.priority,
-            "category": reminder.category,
-            "scheduled_time": reminder.reminder_datetime.isoformat(),
-            "tag": f"budgetbuddy-reminder-{reminder.id}",
-            "url": "/notifications?tab=reminders",
-            "timestamp": int(reminder.reminder_datetime.timestamp() * 1000),
-        }
+        email_ok = False
+        if email_due:
+            try:
+                email_ok = send_mail(
+                    subject=f"BudgetBuddy reminder: {reminder.title}",
+                    message=(
+                        f"Your BudgetBuddy reminder is due.\\n\\n"
+                        f"Reminder: {reminder.title}\\n"
+                        f"Details: {body_text}\\n"
+                        f"Scheduled: {timezone.localtime(reminder.reminder_datetime).strftime('%d %b %Y, %I:%M %p')}"
+                    ),
+                    from_email=settings.DEFAULT_FROM_EMAIL,
+                    recipient_list=[reminder.user.email],
+                    fail_silently=False,
+                ) == 1
+            except Exception:
+                logger.exception("Reminder email delivery failed for reminder_id=%s", reminder.id)
+            if not email_ok:
+                Reminder.objects.filter(pk=reminder.pk).update(email_delivered=False)
 
-        sent_count = 0
-        for sub in subs:
-            if send_web_push(sub, payload):
-                sent_count += 1
+        sms_ok = False
+        if sms_due:
+            sms_ok = send_msg91_reminder_sms(profile.phone_number, reminder.title, body_text)
+            if not sms_ok:
+                Reminder.objects.filter(pk=reminder.pk).update(sms_delivered=False)
 
-        # Keep failed reminders eligible for the next scheduled retry.
-        # The row was marked before sending to prevent concurrent workers from
-        # delivering duplicates; revert that claim only when every push failed.
-        if sent_count == 0:
-            Reminder.objects.filter(
-                pk=reminder.pk,
-                notification_delivered=True,
-            ).update(
-                notification_delivered=False,
-                last_notified_at=None,
-            )
+        push_ok_count = 0
+        if push_due:
+            payload = {
+                "title": "BudgetBuddy – Financial Reminder",
+                "body": f"{reminder.title} – {body_text}",
+                "id": reminder.id,
+                "priority": reminder.priority,
+                "category": reminder.category,
+                "scheduled_time": reminder.reminder_datetime.isoformat(),
+                "tag": f"budgetbuddy-reminder-{reminder.id}",
+                "url": "/notifications?tab=reminders",
+                "timestamp": int(reminder.reminder_datetime.timestamp() * 1000),
+            }
+            for sub in subs:
+                if send_web_push(sub, payload):
+                    push_ok_count += 1
+            if push_ok_count == 0:
+                Reminder.objects.filter(pk=reminder.pk).update(notification_delivered=False)
 
         results.append({
             "reminder_id": reminder.id,
-            "user": reminder.user.username,
-            "subscriptions_count": len(subs),
-            "delivered_count": sent_count,
-            "delivery_success": sent_count > 0,
+            "email_sent": email_ok,
+            "sms_sent": sms_ok,
+            "push_delivered": push_ok_count,
+            "push_subscriptions": len(subs),
         })
 
-    logger.info(f"Delivered {len(due_reminders)} scheduled reminders via Web Push: {results}")
-    return {"processed": len(due_reminders), "results": results}
+    logger.info("Processed %s due reminders across configured channels", len(results))
+    return {"processed": len(results), "results": results}
 
 
 def send_test_push(user):
