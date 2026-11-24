@@ -2,7 +2,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 from django.db.models import Sum
 from django.utils import timezone
-from .delivery import send_brevo_email, brevo_email_ready
+from .delivery import send_brevo_email, brevo_email_ready, build_budgetbuddy_email_html
 from .models import Notification
 from .delivery import send_msg91_reminder_sms
 from transactions.models import Budget, Expense, SavingsGoal
@@ -295,6 +295,7 @@ def deliver_scheduled_reminders():
         email_ok = False
         if email_due:
             try:
+                scheduled_label = timezone.localtime(reminder.reminder_datetime).strftime('%d %b %Y, %I:%M %p')
                 email_result = send_brevo_email(
                     to_email=reminder.user.email,
                     subject=f"BudgetBuddy reminder: {reminder.title}",
@@ -302,7 +303,15 @@ def deliver_scheduled_reminders():
                         f"Your BudgetBuddy reminder is due.\\n\\n"
                         f"Reminder: {reminder.title}\\n"
                         f"Details: {body_text}\\n"
-                        f"Scheduled: {timezone.localtime(reminder.reminder_datetime).strftime('%d %b %Y, %I:%M %p')}"
+                        f"Priority: {reminder.priority.title()}\\n"
+                        f"Scheduled: {scheduled_label}"
+                    ),
+                    html_content=build_budgetbuddy_email_html(
+                        title=reminder.title,
+                        message=f"{body_text}\\n\\nPriority: {reminder.priority.title()}\\nScheduled: {scheduled_label}",
+                        category="reminders",
+                        cta_url="/notifications?tab=reminders",
+                        cta_label="View reminder",
                     ),
                 )
                 email_ok = bool(email_result.get("success"))
