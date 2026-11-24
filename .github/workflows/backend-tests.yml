@@ -38,7 +38,7 @@ jobs:
         run: python manage.py makemigrations --check --dry-run
 
       - name: Run notification tests
-        run: python manage.py test notifications --verbosity 2
+        run: python manage.py test accounts transactions reports notifications budgetbuddy_core --verbosity 2
 
   frontend-build:
     runs-on: ubuntu-latest
