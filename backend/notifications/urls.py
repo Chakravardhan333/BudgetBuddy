@@ -1,5 +1,7 @@
 from django.urls import path
 from .views import (
+    TestEmailDeliveryView,
+    TestSMSDeliveryView,
     NotificationListView,
     NotificationDetailView,
     MarkNotificationReadView,
