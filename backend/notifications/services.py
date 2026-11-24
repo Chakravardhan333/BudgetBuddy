@@ -213,6 +213,7 @@ def deliver_scheduled_reminders():
     """
     import os
     from django.core.mail import send_mail
+    from django.db.models import Q
     from .models import Reminder
     from .delivery import send_msg91_reminder_sms
 
@@ -226,12 +227,28 @@ def deliver_scheduled_reminders():
     )
     msg91_ready = bool(os.environ.get("MSG91_AUTH_KEY", "").strip() and os.environ.get("MSG91_TEMPLATE_ID", "").strip())
 
-    # Fetch all due active reminders, not only users with push subscriptions.
+    # Restrict the queue to reminders with at least one enabled, unfinished
+    # channel. This prevents older reminders with no enabled channel from
+    # occupying the bounded batch and starving newer reminders.
+    eligible = Q(pk__in=[])
+    if smtp_ready:
+        eligible |= Q(email_delivered=False, user__email__gt="")
+    if msg91_ready:
+        eligible |= Q(
+            sms_delivered=False,
+            user__profile__sms_notifications_enabled=True,
+            user__profile__phone_number__gt="",
+        )
+    eligible |= Q(
+        notification_delivered=False,
+        user__push_subscriptions__isnull=False,
+    )
     due_ids = list(Reminder.objects.filter(
+        eligible,
         is_completed=False,
         is_dismissed=False,
         reminder_datetime__lte=now,
-    ).values_list("id", flat=True)[:500])
+    ).order_by("reminder_datetime").values_list("id", flat=True).distinct()[:500])
 
     for reminder_id in due_ids:
         # Lock and claim only channels that are configured and eligible.
