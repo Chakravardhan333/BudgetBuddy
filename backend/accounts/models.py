@@ -25,6 +25,7 @@ class UserProfile(models.Model):
     currency = models.CharField(max_length=10, default='USD')
     currency_symbol = models.CharField(max_length=5, default='$')
     phone_number = models.CharField(max_length=20, blank=True, null=True)
+    sms_notifications_enabled = models.BooleanField(default=False)
     bio = models.TextField(blank=True, null=True)
     monthly_budget_target = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
     created_at = models.DateTimeField(auto_now_add=True)
