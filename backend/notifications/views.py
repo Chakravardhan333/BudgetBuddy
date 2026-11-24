@@ -234,8 +234,13 @@ class ReminderDetailView(APIView):
             old_datetime = reminder.reminder_datetime
             updated = serializer.save()
             if 'reminder_datetime' in request.data and updated.reminder_datetime != old_datetime:
+                # A rescheduled reminder is a new delivery event for every channel.
                 updated.notification_delivered = False
-                updated.save(update_fields=['notification_delivered'])
+                updated.email_delivered = False
+                updated.sms_delivered = False
+                updated.save(update_fields=[
+                    'notification_delivered', 'email_delivered', 'sms_delivered'
+                ])
             return Response(ReminderSerializer(updated).data, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
