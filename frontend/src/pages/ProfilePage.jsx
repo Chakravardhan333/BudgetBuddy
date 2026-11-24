@@ -21,7 +21,8 @@ export default function ProfilePage() {
     first_name: user?.first_name || '',
     last_name: user?.last_name || '',
     email: user?.email || '',
-    phone_number: user?.phone_number || '',
+    phone_number: user?.phone_number || user?.profile?.phone_number || '',
+    sms_notifications_enabled: user?.profile?.sms_notifications_enabled ?? user?.sms_notifications_enabled ?? false,
     bio: user?.bio || '',
     currency: user?.currency || 'USD',
   });
@@ -207,6 +208,31 @@ export default function ProfilePage() {
                 className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:border-emerald-500 focus:bg-white text-sm"
               />
             </div>
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                name="sms_notifications_enabled"
+                checked={Boolean(profileData.sms_notifications_enabled)}
+                onChange={(e) => {
+                  setProfileData((prev) => ({
+                    ...prev,
+                    sms_notifications_enabled: e.target.checked,
+                  }));
+                  setProfileSuccess('');
+                  setProfileError('');
+                }}
+                className="mt-0.5 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+              />
+              <span>
+                <span className="block text-sm font-semibold text-slate-800">Receive reminder alerts by SMS</span>
+                <span className="block text-xs text-slate-500 mt-1">
+                  I agree to receive BudgetBuddy reminder SMS messages at the phone number above. SMS delivery may incur carrier charges. You can turn this off at any time.
+                </span>
+              </span>
+            </label>
           </div>
 
           <div>
