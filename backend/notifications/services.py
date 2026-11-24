@@ -300,15 +300,15 @@ def deliver_scheduled_reminders():
                     to_email=reminder.user.email,
                     subject=f"BudgetBuddy reminder: {reminder.title}",
                     text_content=(
-                        f"Your BudgetBuddy reminder is due.\\n\\n"
-                        f"Reminder: {reminder.title}\\n"
-                        f"Details: {body_text}\\n"
-                        f"Priority: {reminder.priority.title()}\\n"
+                        f"Your BudgetBuddy reminder is due.\n\n"
+                        f"Reminder: {reminder.title}\n"
+                        f"Details: {body_text}\n"
+                        f"Priority: {reminder.priority.title()}\n"
                         f"Scheduled: {scheduled_label}"
                     ),
                     html_content=build_budgetbuddy_email_html(
                         title=reminder.title,
-                        message=f"{body_text}\\n\\nPriority: {reminder.priority.title()}\\nScheduled: {scheduled_label}",
+                        message=f"{body_text}\n\nPriority: {reminder.priority.title()}\nScheduled: {scheduled_label}",
                         category="reminders",
                         cta_url="/notifications?tab=reminders",
                         cta_label="View reminder",
