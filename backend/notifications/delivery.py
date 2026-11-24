@@ -113,3 +113,59 @@ def send_msg91_reminder_sms(phone_number, title, message):
     except Exception as exc:
         logger.warning("MSG91 reminder delivery failed: %s", type(exc).__name__)
         return False
+
+
+
+def brevo_email_ready():
+    """Return whether the HTTPS-based Brevo API sender is configured."""
+    return bool(os.environ.get("BREVO_API_KEY", "").strip() and os.environ.get("BREVO_SENDER_EMAIL", "").strip())
+
+
+def send_brevo_email(to_email, subject, text_content, html_content=None):
+    """Send transactional email through Brevo's HTTPS API (works on Render Free)."""
+    api_key = os.environ.get("BREVO_API_KEY", "").strip()
+    sender_email = os.environ.get("BREVO_SENDER_EMAIL", "").strip()
+    sender_name = os.environ.get("BREVO_SENDER_NAME", "BudgetBuddy").strip() or "BudgetBuddy"
+    if not api_key or not sender_email:
+        return {"success": False, "message": "Brevo API is not configured. Add BREVO_API_KEY and BREVO_SENDER_EMAIL in Render."}
+
+    payload = {
+        "sender": {"name": sender_name, "email": sender_email},
+        "to": [{"email": to_email}],
+        "subject": subject,
+        "textContent": text_content,
+    }
+    if html_content:
+        payload["htmlContent"] = html_content
+
+    request = Request(
+        "https://api.brevo.com/v3/smtp/email",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "accept": "application/json",
+            "api-key": api_key,
+            "content-type": "application/json",
+        },
+        method="POST",
+    )
+    try:
+        with urlopen(request, timeout=20) as response:
+            response_body = response.read().decode("utf-8", errors="replace")
+            provider_data = json.loads(response_body) if response_body else {}
+            if 200 <= response.status < 300 and provider_data.get("messageId"):
+                return {"success": True, "message_id": provider_data["messageId"]}
+            logger.warning("Brevo API did not confirm email acceptance (HTTP %s).", response.status)
+            return {"success": False, "message": "Brevo did not confirm acceptance of the email."}
+    except HTTPError as exc:
+        try:
+            provider_error = exc.read().decode("utf-8", errors="replace")[:1000]
+        except Exception:
+            provider_error = ""
+        logger.warning("Brevo API rejected email (HTTP %s): %s", exc.code, provider_error)
+        return {"success": False, "message": "Brevo rejected the email. Check the sender verification, API key, and transactional email status in Brevo."}
+    except (URLError, TimeoutError) as exc:
+        logger.warning("Brevo API connection failed: %s", type(exc).__name__)
+        return {"success": False, "message": "Could not connect to Brevo over HTTPS. Check Render network access and try again."}
+    except Exception:
+        logger.exception("Unexpected Brevo email delivery error.")
+        return {"success": False, "message": "Unexpected error while sending email through Brevo."}
