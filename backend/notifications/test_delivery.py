@@ -54,6 +54,47 @@ class NotificationChannelTestEndpointTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertFalse(response.data["success"])
 
+    def test_rescheduling_resets_all_delivery_channels(self):
+        reminder = Reminder.objects.create(
+            user=self.user,
+            title="Rescheduled bill",
+            reminder_datetime=timezone.now() - timedelta(minutes=1),
+            notification_delivered=True,
+            email_delivered=True,
+            sms_delivered=True,
+        )
+        new_time = (timezone.now() + timedelta(hours=1)).isoformat()
+        response = self.client.patch(
+            reverse("reminder_detail", kwargs={"pk": reminder.pk}),
+            {"reminder_datetime": new_time},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        reminder.refresh_from_db()
+        self.assertFalse(reminder.notification_delivered)
+        self.assertFalse(reminder.email_delivered)
+        self.assertFalse(reminder.sms_delivered)
+
+    def test_snoozing_resets_all_delivery_channels(self):
+        reminder = Reminder.objects.create(
+            user=self.user,
+            title="Snoozed bill",
+            reminder_datetime=timezone.now() - timedelta(minutes=1),
+            notification_delivered=True,
+            email_delivered=True,
+            sms_delivered=True,
+        )
+        response = self.client.post(
+            reverse("reminder_snooze", kwargs={"pk": reminder.pk}),
+            {"minutes": 30},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        reminder.refresh_from_db()
+        self.assertFalse(reminder.notification_delivered)
+        self.assertFalse(reminder.email_delivered)
+        self.assertFalse(reminder.sms_delivered)
+
 
 
 class ScheduledReminderChannelDeliveryTests(TestCase):
