@@ -2,7 +2,9 @@ from datetime import date, timedelta
 from decimal import Decimal
 from django.db.models import Sum
 from django.utils import timezone
+from django.core.mail import send_mail
 from .models import Notification
+from .delivery import send_msg91_reminder_sms
 from transactions.models import Budget, Expense, SavingsGoal
 
 def trigger_user_notifications(user):
@@ -212,10 +214,8 @@ def deliver_scheduled_reminders():
     channel fails and is retried by Celery.
     """
     import os
-    from django.core.mail import send_mail
     from django.db.models import Q
     from .models import Reminder
-    from .delivery import send_msg91_reminder_sms
 
     now = timezone.now()
     results = []
