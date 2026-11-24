@@ -22,7 +22,7 @@ The authenticated endpoint `POST /api/notifications/sms/test/` sends one test SM
 - `MSG91_TEMPLATE_ID=<approved MSG91 Flow/DLT template ID>`
 - `MSG91_COUNTRY_CODE=91` (optional; defaults to India)
 
-The approved MSG91 template must contain variables corresponding to `var1` and `var2`. Indian SMS delivery also requires the appropriate DLT entity, sender header, and approved template configuration. Do not send SMS to users who have not opted in. This test endpoint is not a recurring reminder subscription.
+The approved MSG91 template must contain variables corresponding to `var1` and `var2`. Indian SMS delivery also requires the appropriate DLT entity, sender header, and approved template configuration. Do not send SMS to users who have not opted in. This test endpoint is not a recurring reminder subscription.\n\n## Scheduled reminder delivery\n\nDue reminders are dispatched independently through each configured channel. Email is sent to the account email address when SMTP is configured. SMS is sent only when `MSG91_AUTH_KEY` and `MSG91_TEMPLATE_ID` are configured, the profile has a phone number, and `sms_notifications_enabled` is explicitly set to `true` by the signed-in user through the profile update API (`PATCH /api/accounts/profile/`). Set `sms_notifications_enabled` to `false` to opt out. Successful channel deliveries are tracked separately so a failed channel can be retried without resending channels that already succeeded. Web Push continues to use active browser subscriptions.
 
 ## Important deployment note
 
