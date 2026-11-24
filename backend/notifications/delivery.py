@@ -22,14 +22,14 @@ def send_msg91_test_sms(phone_number):
     """
     auth_key = os.environ.get("MSG91_AUTH_KEY", "").strip()
     template_id = os.environ.get("MSG91_TEMPLATE_ID", "").strip()
-    country_code = re.sub(r"\\D", "", os.environ.get("MSG91_COUNTRY_CODE", "91"))
+    country_code = re.sub(r"\D", "", os.environ.get("MSG91_COUNTRY_CODE", "91"))
     if not auth_key or not template_id:
         return {
             "success": False,
             "message": "MSG91 is not configured. Add MSG91_AUTH_KEY and MSG91_TEMPLATE_ID in Render.",
         }
 
-    digits = re.sub(r"\\D", "", phone_number)
+    digits = re.sub(r"\D", "", phone_number)
     if digits.startswith("0"):
         digits = digits.lstrip("0")
     if country_code and not digits.startswith(country_code):
