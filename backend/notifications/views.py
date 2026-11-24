@@ -8,6 +8,7 @@ import logging
 from .models import Notification, Reminder, PushSubscription
 from .serializers import NotificationSerializer, ReminderSerializer, PushSubscriptionSerializer
 from .services import trigger_user_notifications, send_test_push, deliver_scheduled_reminders
+from .delivery import send_brevo_email
 
 
 class NotificationListView(APIView):
@@ -552,40 +553,17 @@ class TestEmailDeliveryView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        if (
-            settings.EMAIL_BACKEND != 'django.core.mail.backends.smtp.EmailBackend'
-            or not settings.EMAIL_HOST_USER
-            or not settings.EMAIL_HOST_PASSWORD
-            or not settings.EMAIL_HOST
-        ):
+        result = send_brevo_email(
+            to_email=recipient,
+            subject="BudgetBuddy email delivery test",
+            text_content=(
+                "Hello! This is a test email from BudgetBuddy. "
+                "Your email notification connection is working."
+            ),
+        )
+        if not result.get("success"):
             return Response(
-                {"success": False, "message": "Email delivery is not configured on the server."},
-                status=status.HTTP_503_SERVICE_UNAVAILABLE,
-            )
-
-        try:
-            sent = send_mail(
-                subject="BudgetBuddy email delivery test",
-                message=(
-                    "Hello! This is a test email from BudgetBuddy. "
-                    "Your email notification connection is working."
-                ),
-                from_email=settings.DEFAULT_FROM_EMAIL,
-                recipient_list=[recipient],
-                fail_silently=False,
-            )
-        except Exception:
-            logging.getLogger(__name__).exception(
-                "BudgetBuddy test email failed for user_id=%s", request.user.id
-            )
-            return Response(
-                {"success": False, "message": "The email provider could not send the test message. Check the server email configuration and logs."},
-                status=status.HTTP_502_BAD_GATEWAY,
-            )
-
-        if sent != 1:
-            return Response(
-                {"success": False, "message": "The email provider did not accept the test message."},
+                {"success": False, "message": result.get("message", "Brevo could not send the test email.")},
                 status=status.HTTP_502_BAD_GATEWAY,
             )
 
