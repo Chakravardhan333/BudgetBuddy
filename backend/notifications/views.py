@@ -337,7 +337,10 @@ class ReminderSnoozeView(APIView):
         reminder.is_completed = False
         reminder.is_dismissed = False
         reminder.snooze_count += 1
+        # Snoozing creates a new due time, so allow each enabled channel to send again.
         reminder.notification_delivered = False
+        reminder.email_delivered = False
+        reminder.sms_delivered = False
         reminder.save()
 
         serializer = ReminderSerializer(reminder)
