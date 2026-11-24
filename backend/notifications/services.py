@@ -2,7 +2,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 from django.db.models import Sum
 from django.utils import timezone
-from django.core.mail import send_mail
+from .delivery import send_brevo_email, brevo_email_ready
 from .models import Notification
 from .delivery import send_msg91_reminder_sms
 from transactions.models import Budget, Expense, SavingsGoal
@@ -219,19 +219,14 @@ def deliver_scheduled_reminders():
 
     now = timezone.now()
     results = []
-    smtp_ready = (
-        getattr(settings, "EMAIL_BACKEND", "") == "django.core.mail.backends.smtp.EmailBackend"
-        and bool(getattr(settings, "EMAIL_HOST", ""))
-        and bool(getattr(settings, "EMAIL_HOST_USER", ""))
-        and bool(getattr(settings, "EMAIL_HOST_PASSWORD", ""))
-    )
+    email_ready = brevo_email_ready()
     msg91_ready = bool(os.environ.get("MSG91_AUTH_KEY", "").strip() and os.environ.get("MSG91_TEMPLATE_ID", "").strip())
 
     # Restrict the queue to reminders with at least one enabled, unfinished
     # channel. This prevents older reminders with no enabled channel from
     # occupying the bounded batch and starving newer reminders.
     eligible = Q(pk__in=[])
-    if smtp_ready:
+    if email_ready:
         eligible |= Q(email_delivered=False, user__email__gt="")
     if msg91_ready:
         eligible |= Q(
@@ -259,7 +254,7 @@ def deliver_scheduled_reminders():
 
             subs = list(PushSubscription.objects.filter(user=reminder.user))
             profile = getattr(reminder.user, "profile", None)
-            email_due = smtp_ready and bool((reminder.user.email or "").strip()) and not reminder.email_delivered
+            email_due = email_ready and bool((reminder.user.email or "").strip()) and not reminder.email_delivered
             sms_due = (
                 msg91_ready
                 and bool(profile and profile.sms_notifications_enabled)
@@ -300,18 +295,19 @@ def deliver_scheduled_reminders():
         email_ok = False
         if email_due:
             try:
-                email_ok = send_mail(
+                email_result = send_brevo_email(
+                    to_email=reminder.user.email,
                     subject=f"BudgetBuddy reminder: {reminder.title}",
-                    message=(
+                    text_content=(
                         f"Your BudgetBuddy reminder is due.\\n\\n"
                         f"Reminder: {reminder.title}\\n"
                         f"Details: {body_text}\\n"
                         f"Scheduled: {timezone.localtime(reminder.reminder_datetime).strftime('%d %b %Y, %I:%M %p')}"
                     ),
-                    from_email=settings.DEFAULT_FROM_EMAIL,
-                    recipient_list=[reminder.user.email],
-                    fail_silently=False,
-                ) == 1
+                )
+                email_ok = bool(email_result.get("success"))
+                if not email_ok:
+                    logger.warning("Brevo reminder email failed for reminder_id=%s: %s", reminder.id, email_result.get("message"))
             except Exception:
                 logger.exception("Reminder email delivery failed for reminder_id=%s", reminder.id)
             if not email_ok:
