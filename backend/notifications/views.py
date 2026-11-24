@@ -561,7 +561,7 @@ class TestEmailDeliveryView(APIView):
         result = send_brevo_email(
             to_email=recipient,
             subject="Your BudgetBuddy email notifications are ready",
-            text_content=f"Hello!\\n\\n{test_message}\\n\\nOpen BudgetBuddy to review your finances.",
+            text_content=f"Hello!\n\n{test_message}\n\nOpen BudgetBuddy to review your finances.",
             html_content=build_budgetbuddy_email_html(
                 title="Your email notifications are ready!",
                 message=test_message,
