@@ -3,7 +3,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import permissions, status
 from django.utils import timezone
-from django.core.mail import send_mail
+from .email_delivery import send_brevo_email
 import logging
 from .models import Notification, Reminder, PushSubscription
 from .serializers import NotificationSerializer, ReminderSerializer, PushSubscriptionSerializer
@@ -552,38 +552,23 @@ class TestEmailDeliveryView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        if (
-            settings.EMAIL_BACKEND != 'django.core.mail.backends.smtp.EmailBackend'
-            or not settings.EMAIL_HOST_USER
-            or not settings.EMAIL_HOST_PASSWORD
-            or not settings.EMAIL_HOST
-        ):
+        if not getattr(settings, "BREVO_API_KEY", "").strip():
             return Response(
-                {"success": False, "message": "Email delivery is not configured on the server."},
+                {"success": False, "message": "Email delivery is not configured on the server. Add BREVO_API_KEY in Render."},
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
 
-        try:
-            sent = send_mail(
-                subject="BudgetBuddy email delivery test",
-                message=(
-                    "Hello! This is a test email from BudgetBuddy. "
-                    "Your email notification connection is working."
-                ),
-                from_email=settings.DEFAULT_FROM_EMAIL,
-                recipient_list=[recipient],
-                fail_silently=False,
-            )
-        except Exception:
-            logging.getLogger(__name__).exception(
-                "BudgetBuddy test email failed for user_id=%s", request.user.id
-            )
-            return Response(
-                {"success": False, "message": "The email provider could not send the test message. Check the server email configuration and logs."},
-                status=status.HTTP_502_BAD_GATEWAY,
-            )
+        sent = send_brevo_email(
+            subject="BudgetBuddy email delivery test",
+            message=(
+                "Hello! This is a test email from BudgetBuddy. "
+                "Your email notification connection is working."
+            ),
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient=recipient,
+        )
 
-        if sent != 1:
+        if not sent:
             return Response(
                 {"success": False, "message": "The email provider did not accept the test message."},
                 status=status.HTTP_502_BAD_GATEWAY,
