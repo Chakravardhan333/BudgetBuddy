@@ -159,6 +159,7 @@ export const AuthProvider = ({ children }) => {
         currency: updatedUser.profile?.currency || user.currency,
         currency_symbol: updatedUser.profile?.currency_symbol || user.currency_symbol,
         phone_number: updatedUser.profile?.phone_number || '',
+        sms_notifications_enabled: updatedUser.profile?.sms_notifications_enabled ?? false,
         bio: updatedUser.profile?.bio || '',
         is_staff: updatedUser.is_staff,
         is_superuser: updatedUser.is_superuser,
