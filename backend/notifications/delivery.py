@@ -80,10 +80,10 @@ def send_msg91_reminder_sms(phone_number, title, message):
     """Send one opted-in reminder SMS using the configured approved MSG91 Flow template."""
     auth_key = os.environ.get("MSG91_AUTH_KEY", "").strip()
     template_id = os.environ.get("MSG91_TEMPLATE_ID", "").strip()
-    country_code = re.sub(r"\\D", "", os.environ.get("MSG91_COUNTRY_CODE", "91"))
+    country_code = re.sub(r"\D", "", os.environ.get("MSG91_COUNTRY_CODE", "91"))
     if not auth_key or not template_id:
         return False
-    digits = re.sub(r"\\D", "", phone_number or "")
+    digits = re.sub(r"\D", "", phone_number or "")
     if digits.startswith("0"):
         digits = digits.lstrip("0")
     if country_code and not digits.startswith(country_code):
