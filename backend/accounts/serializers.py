@@ -214,11 +214,10 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         ).first()
 
         if user_candidate:
-            # Check if user exists and password is correct, but account is deactivated
+            # Check if user exists and password is correct but account is deactivated
             if user_candidate.check_password(raw_password) and not user_candidate.is_active:
                 from rest_framework_simplejwt.exceptions import AuthenticationFailed
                 raise AuthenticationFailed('This account has been deactivated. Please contact support.')
-            # Canonicalize username for Django authentication backend
             attrs['username'] = user_candidate.username
         else:
             attrs['username'] = raw_username
@@ -236,12 +235,8 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             'full_name': f"{user.first_name} {user.last_name}".strip() or user.username,
             'role': profile.role if profile else 'student',
             'currency': profile.currency if profile else 'USD',
-            'currency_symbol': profile.currency_symbol if profile else '
-            'is_superuser': user.is_superuser,
-        }
-        return data
-,
-            'phone_number': profile.phone_number or '' if profile else '',
+            'currency_symbol': profile.currency_symbol if profile else "$",
+            'phone_number': (profile.phone_number or "") if profile else "",
             'sms_notifications_enabled': profile.sms_notifications_enabled if profile else False,
             'is_staff': user.is_staff,
             'is_superuser': user.is_superuser,
