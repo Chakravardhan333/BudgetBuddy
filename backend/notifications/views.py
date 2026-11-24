@@ -3,6 +3,8 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import permissions, status
 from django.utils import timezone
+from django.core.mail import send_mail
+import logging
 from .models import Notification, Reminder, PushSubscription
 from .serializers import NotificationSerializer, ReminderSerializer, PushSubscriptionSerializer
 from .services import trigger_user_notifications, send_test_push, deliver_scheduled_reminders
@@ -525,3 +527,94 @@ class TriggerDeliverRemindersView(APIView):
         res = deliver_scheduled_reminders()
         return Response(res, status=status.HTTP_200_OK)
 
+
+
+class TestEmailDeliveryView(APIView):
+    """
+    POST /api/notifications/email/test/
+    Sends a test email only to the authenticated user's own account address.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        recipient = (request.user.email or '').strip()
+        if not recipient:
+            return Response(
+                {"success": False, "message": "Add an email address to your BudgetBuddy profile first."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not settings.EMAIL_HOST_USER or not settings.EMAIL_HOST_PASSWORD:
+            return Response(
+                {"success": False, "message": "Email delivery is not configured on the server."},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        try:
+            sent = send_mail(
+                subject="BudgetBuddy email delivery test",
+                message=(
+                    "Hello! This is a test email from BudgetBuddy. "
+                    "Your email notification connection is working."
+                ),
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[recipient],
+                fail_silently=False,
+            )
+        except Exception:
+            logging.getLogger(__name__).exception(
+                "BudgetBuddy test email failed for user_id=%s", request.user.id
+            )
+            return Response(
+                {"success": False, "message": "The email provider could not send the test message. Check the server email configuration and logs."},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
+        if sent != 1:
+            return Response(
+                {"success": False, "message": "The email provider did not accept the test message."},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
+        return Response(
+            {"success": True, "message": "Test email accepted by the email provider.", "recipient": recipient},
+            status=status.HTTP_200_OK,
+        )
+
+
+class TestSMSDeliveryView(APIView):
+    """
+    POST /api/notifications/sms/test/
+    Sends one user-requested test SMS to the phone number on the caller's profile.
+    Requires explicit confirmation in the request body.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        if request.data.get('confirm_consent') is not True:
+            return Response(
+                {"success": False, "message": "Explicit confirmation is required before sending a test SMS."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        profile = getattr(request.user, 'profile', None)
+        phone = (getattr(profile, 'phone_number', '') or '').strip()
+        if not phone:
+            return Response(
+                {"success": False, "message": "Add your phone number to your BudgetBuddy profile first."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            from .delivery import send_msg91_test_sms
+            result = send_msg91_test_sms(phone)
+        except Exception:
+            logging.getLogger(__name__).exception(
+                "BudgetBuddy test SMS failed for user_id=%s", request.user.id
+            )
+            result = {"success": False, "message": "SMS provider request failed."}
+
+        return Response(
+            result,
+            status=status.HTTP_200_OK if result.get("success") else status.HTTP_502_BAD_GATEWAY,
+        )
