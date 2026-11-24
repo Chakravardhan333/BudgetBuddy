@@ -13,6 +13,7 @@ class UserProfileSerializer(serializers.ModelSerializer):
             'currency',
             'currency_symbol',
             'phone_number',
+            'sms_notifications_enabled',
             'bio',
             'monthly_budget_target',
             'created_at',
@@ -128,6 +129,7 @@ class ProfileUpdateSerializer(serializers.Serializer):
     last_name = serializers.CharField(max_length=150, required=False, allow_blank=True)
     email = serializers.EmailField(required=False)
     phone_number = serializers.CharField(max_length=20, required=False, allow_blank=True)
+    sms_notifications_enabled = serializers.BooleanField(required=False)
     bio = serializers.CharField(required=False, allow_blank=True)
     currency = serializers.CharField(max_length=10, required=False)
     monthly_budget_target = serializers.DecimalField(max_digits=12, decimal_places=2, required=False)
@@ -154,6 +156,8 @@ class ProfileUpdateSerializer(serializers.Serializer):
         # Update UserProfile fields
         if 'phone_number' in validated_data:
             profile.phone_number = validated_data['phone_number']
+        if 'sms_notifications_enabled' in validated_data:
+            profile.sms_notifications_enabled = validated_data['sms_notifications_enabled']
         if 'bio' in validated_data:
             profile.bio = validated_data['bio']
         if 'currency' in validated_data:
