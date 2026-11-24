@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 @shared_task(name='notifications.tasks.deliver_due_reminders_task')
 def deliver_due_reminders_task():
     """
-    Celery periodic task that evaluates scheduled financial reminders and delivers Web Push notifications.
+    Celery periodic task that evaluates scheduled financial reminders and delivers configured Web Push, email, and explicitly opted-in SMS notifications.
     """
     try:
         results = deliver_scheduled_reminders()
