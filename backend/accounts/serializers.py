@@ -236,7 +236,13 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             'full_name': f"{user.first_name} {user.last_name}".strip() or user.username,
             'role': profile.role if profile else 'student',
             'currency': profile.currency if profile else 'USD',
-            'currency_symbol': profile.currency_symbol if profile else '$',
+            'currency_symbol': profile.currency_symbol if profile else '
+            'is_superuser': user.is_superuser,
+        }
+        return data
+,
+            'phone_number': profile.phone_number or '' if profile else '',
+            'sms_notifications_enabled': profile.sms_notifications_enabled if profile else False,
             'is_staff': user.is_staff,
             'is_superuser': user.is_superuser,
         }
