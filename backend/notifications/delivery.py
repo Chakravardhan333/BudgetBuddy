@@ -117,58 +117,94 @@ def send_msg91_reminder_sms(phone_number, title, message):
 
 
 def brevo_email_ready():
-    """Return whether the HTTPS-based Brevo API sender is configured."""
-    return bool(os.environ.get("BREVO_API_KEY", "").strip() and os.environ.get("BREVO_SENDER_EMAIL", "").strip())
+    """Return whether the HTTPS-based Brevo API sender or SMTP sender is configured."""
+    has_api_key = bool(
+        (os.environ.get("BREVO_API_KEY", "").strip() or os.environ.get("BREVO_SMTP_KEY", "").strip()) and
+        (os.environ.get("BREVO_SENDER_EMAIL", "").strip() or os.environ.get("EMAIL_HOST_USER", "").strip())
+    )
+    from django.conf import settings
+    backend = getattr(settings, 'EMAIL_BACKEND', '')
+    has_smtp = 'smtp' in backend and bool(getattr(settings, 'EMAIL_HOST_PASSWORD', None))
+    return has_api_key or has_smtp
 
 
 def send_brevo_email(to_email, subject, text_content, html_content=None):
-    """Send transactional email through Brevo's HTTPS API (works on Render Free)."""
-    api_key = os.environ.get("BREVO_API_KEY", "").strip()
-    sender_email = os.environ.get("BREVO_SENDER_EMAIL", "").strip()
-    sender_name = os.environ.get("BREVO_SENDER_NAME", "BudgetBuddy").strip() or "BudgetBuddy"
-    if not api_key or not sender_email:
-        return {"success": False, "message": "Brevo API is not configured. Add BREVO_API_KEY and BREVO_SENDER_EMAIL in Render."}
+    """
+    Send transactional email through Brevo's HTTPS API (works on Render Free)
+    or fallback to Django's configured EMAIL_BACKEND.
+    """
+    from django.core.mail import send_mail
+    from django.conf import settings
 
-    payload = {
-        "sender": {"name": sender_name, "email": sender_email},
-        "to": [{"email": to_email}],
-        "subject": subject,
-        "textContent": text_content,
-    }
-    if html_content:
-        payload["htmlContent"] = html_content
-
-    request = Request(
-        "https://api.brevo.com/v3/smtp/email",
-        data=json.dumps(payload).encode("utf-8"),
-        headers={
-            "accept": "application/json",
-            "api-key": api_key,
-            "content-type": "application/json",
-        },
-        method="POST",
+    api_key = (
+        os.environ.get("BREVO_API_KEY", "").strip()
+        or os.environ.get("BREVO_SMTP_KEY", "").strip()
     )
-    try:
-        with urlopen(request, timeout=20) as response:
-            response_body = response.read().decode("utf-8", errors="replace")
-            provider_data = json.loads(response_body) if response_body else {}
-            if 200 <= response.status < 300 and provider_data.get("messageId"):
-                return {"success": True, "message_id": provider_data["messageId"]}
-            logger.warning("Brevo API did not confirm email acceptance (HTTP %s).", response.status)
-            return {"success": False, "message": "Brevo did not confirm acceptance of the email."}
-    except HTTPError as exc:
+    sender_email = (
+        os.environ.get("BREVO_SENDER_EMAIL", "").strip()
+        or os.environ.get("EMAIL_HOST_USER", "").strip()
+    )
+    sender_name = os.environ.get("BREVO_SENDER_NAME", "BudgetBuddy").strip() or "BudgetBuddy"
+
+    # If in test mode or console mode, use send_mail so outbox is populated
+    backend = getattr(settings, 'EMAIL_BACKEND', '')
+    if 'locmem' in backend:
         try:
-            provider_error = exc.read().decode("utf-8", errors="replace")[:1000]
+            send_mail(subject, text_content, f"{sender_name} <{sender_email or 'noreply@budgetbuddy.app'}>", [to_email], html_message=html_content, fail_silently=False)
+            return {"success": True, "message_id": "test-locmem"}
+        except Exception as exc:
+            return {"success": False, "message": str(exc)}
+
+    if api_key and sender_email and '@' in sender_email:
+        payload = {
+            "sender": {"name": sender_name, "email": sender_email},
+            "to": [{"email": to_email}],
+            "subject": subject,
+            "textContent": text_content,
+        }
+        if html_content:
+            payload["htmlContent"] = html_content
+
+        request = Request(
+            "https://api.brevo.com/v3/smtp/email",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "accept": "application/json",
+                "api-key": api_key,
+                "content-type": "application/json",
+            },
+            method="POST",
+        )
+        try:
+            with urlopen(request, timeout=20) as response:
+                response_body = response.read().decode("utf-8", errors="replace")
+                provider_data = json.loads(response_body) if response_body else {}
+                if 200 <= response.status < 300 and provider_data.get("messageId"):
+                    return {"success": True, "message_id": provider_data["messageId"]}
+                logger.warning("Brevo API did not confirm email acceptance (HTTP %s).", response.status)
+                return {"success": False, "message": "Brevo did not confirm acceptance of the email."}
+        except HTTPError as exc:
+            try:
+                provider_error = exc.read().decode("utf-8", errors="replace")[:1000]
+            except Exception:
+                provider_error = ""
+            logger.warning("Brevo API rejected email (HTTP %s): %s", exc.code, provider_error)
+            # Fallback to SMTP if API rejected
+        except (URLError, TimeoutError) as exc:
+            logger.warning("Brevo API connection failed: %s", type(exc).__name__)
         except Exception:
-            provider_error = ""
-        logger.warning("Brevo API rejected email (HTTP %s): %s", exc.code, provider_error)
-        return {"success": False, "message": "Brevo rejected the email. Check the sender verification, API key, and transactional email status in Brevo."}
-    except (URLError, TimeoutError) as exc:
-        logger.warning("Brevo API connection failed: %s", type(exc).__name__)
-        return {"success": False, "message": "Could not connect to Brevo over HTTPS. Check Render network access and try again."}
-    except Exception:
-        logger.exception("Unexpected Brevo email delivery error.")
-        return {"success": False, "message": "Unexpected error while sending email through Brevo."}
+            logger.exception("Unexpected Brevo email delivery error.")
+
+    # Fallback to Django send_mail (SMTP relay)
+    if 'smtp' in backend:
+        try:
+            from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', None) or f"BudgetBuddy <{sender_email}>"
+            send_mail(subject, text_content, from_email, [to_email], html_message=html_content, fail_silently=False)
+            return {"success": True, "message_id": "smtp-sent"}
+        except Exception as exc:
+            return {"success": False, "message": f"SMTP delivery failed: {exc}"}
+
+    return {"success": False, "message": "Neither Brevo API nor SMTP is configured on this server."}
 
 
 def build_budgetbuddy_email_html(title, message, category="system", cta_url="/dashboard", cta_label="Open BudgetBuddy"):
@@ -221,21 +257,67 @@ def send_notification_email(notification):
     """Send a newly-created in-app notification as a branded transactional email."""
     user = notification.user
     recipient = (getattr(user, "email", "") or "").strip()
+    profile = getattr(user, "profile", None)
     if not recipient or not brevo_email_ready():
         return {"success": False, "message": "No recipient email or Brevo configuration is available."}
+    if profile and not getattr(profile, "email_notifications_enabled", True):
+        return {"success": False, "message": "Email notifications are disabled by user preferences."}
 
     category = getattr(notification, "category", "system")
-    link = getattr(notification, "link", None) or "/dashboard"
-    html_content = build_budgetbuddy_email_html(
-        title=notification.title,
-        message=notification.message,
-        category=category,
-        cta_url=link,
-    )
+    link = getattr(notification, "link", None) or "/notifications"
     frontend_url = os.environ.get("FRONTEND_URL", "https://budget-buddy-sigma-two.vercel.app").rstrip("/")
-    return send_brevo_email(
+
+    # Use professional dark-theme template builder
+    try:
+        from .email_service import render_budgetbuddy_email
+        user_name = user.get_full_name() or user.first_name or user.username
+        badge_type = "alert" if "exceeded" in notification.title.lower() or "overdue" in notification.title.lower() else ("warning" if "warning" in notification.title.lower() or "limit" in notification.title.lower() else "info")
+        badge_text = "Budget Alert" if category == 'budgets' else ("Expense Logged" if category == 'expenses' else ("Savings Update" if category in ('payments', 'savings') else "Notification"))
+        cta_text = "View Budget" if category == 'budgets' else ("View Transactions" if category == 'expenses' else ("View Savings Goals" if category in ('payments', 'savings') else "Open BudgetBuddy"))
+        cta_target = f"{frontend_url}{link if link.startswith('/') else '/' + link}"
+
+        html_content = render_budgetbuddy_email(
+            title=f"BudgetBuddy: {notification.title}",
+            badge_text=badge_text,
+            badge_type=badge_type,
+            headline=notification.title,
+            greeting=f"Hello {user_name},",
+            body_paragraphs=[notification.message],
+            section_title="NOTIFICATION DETAILS",
+            details={
+                "Title": notification.title,
+                "Category": category.title(),
+                "Details": notification.message,
+            },
+            cta_text=cta_text,
+            cta_url=cta_target,
+        )
+    except Exception:
+        html_content = build_budgetbuddy_email_html(
+            title=notification.title,
+            message=notification.message,
+            category=category,
+            cta_url=link,
+        )
+
+    res = send_brevo_email(
         to_email=recipient,
         subject=f"BudgetBuddy: {notification.title}",
         text_content=f"{notification.title}\n\n{notification.message}\n\nOpen BudgetBuddy: {frontend_url}{link}",
         html_content=html_content,
     )
+    try:
+        from .models import NotificationDeliveryLog
+        NotificationDeliveryLog.objects.create(
+            user=user,
+            notification=notification,
+            channel='email',
+            recipient=recipient,
+            status='sent' if res.get('success') else 'failed',
+            subject=f"BudgetBuddy: {notification.title}",
+            message_preview=notification.message[:200],
+            error_message=res.get('message', ''),
+        )
+    except Exception:
+        pass
+    return res

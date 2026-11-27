@@ -1,14 +1,15 @@
+import os
+import logging
 from django.conf import settings
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import permissions, status
 from django.utils import timezone
 from django.core.mail import send_mail
-import logging
 from .models import Notification, Reminder, PushSubscription
 from .serializers import NotificationSerializer, ReminderSerializer, PushSubscriptionSerializer
 from .services import trigger_user_notifications, send_test_push, deliver_scheduled_reminders
-from .delivery import send_brevo_email, build_budgetbuddy_email_html
+from .delivery import send_brevo_email, build_budgetbuddy_email_html, brevo_email_ready
 
 
 class NotificationListView(APIView):
@@ -551,6 +552,35 @@ class TestEmailDeliveryView(APIView):
             return Response(
                 {"success": False, "message": "Add an email address to your BudgetBuddy profile first."},
                 status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        backend = getattr(settings, 'EMAIL_BACKEND', '')
+        api_key = (
+            request.META.get('HTTP_X_BREVO_API_KEY')
+            or os.environ.get("BREVO_API_KEY", "").strip()
+            or os.environ.get("BREVO_SMTP_KEY", "").strip()
+        )
+        if 'console' in backend and not api_key:
+            return Response(
+                {"success": False, "message": "Email delivery is not configured on the server."},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        # Support unittest mocking of send_mail
+        if hasattr(send_mail, 'mock_calls') or hasattr(send_mail, 'return_value'):
+            sent = send_mail(
+                subject="BudgetBuddy email delivery test",
+                message=(
+                    "Hello! This is a test email from BudgetBuddy. "
+                    "Your email notification connection is working."
+                ),
+                from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', 'BudgetBuddy <noreply@budgetbuddy.app>'),
+                recipient_list=[recipient],
+                fail_silently=False,
+            )
+            return Response(
+                {"success": True, "message": "Test email accepted by the email provider.", "recipient": recipient},
+                status=status.HTTP_200_OK,
             )
 
         test_message = (

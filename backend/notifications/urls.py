@@ -25,6 +25,7 @@ from .views import (
 
 urlpatterns = [
     path('email/test/', TestEmailDeliveryView.as_view(), name='notification_email_test'),
+    path('test-email/', TestEmailDeliveryView.as_view(), name='notification_email_test_alt'),
     path('sms/test/', TestSMSDeliveryView.as_view(), name='notification_sms_test'),
     path('', NotificationListView.as_view(), name='notification_list'),
     path('unread-count/', UnreadCountView.as_view(), name='notification_unread_count'),

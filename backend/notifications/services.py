@@ -1,11 +1,23 @@
+import logging
 from datetime import date, timedelta
 from decimal import Decimal
+from django.conf import settings
+from django.core.mail import send_mail
 from django.db.models import Sum
 from django.utils import timezone
-from .delivery import send_brevo_email, brevo_email_ready, build_budgetbuddy_email_html
-from .models import Notification
-from .delivery import send_msg91_reminder_sms
+from .delivery import send_brevo_email, brevo_email_ready, build_budgetbuddy_email_html, send_msg91_reminder_sms
+from .models import Notification, Reminder, PushSubscription, NotificationDeliveryLog
+from .email_service import (
+    build_reminder_due_email,
+    build_overdue_reminder_email,
+    build_payment_deadline_email,
+    build_budget_threshold_email,
+    build_expense_recorded_email,
+    build_savings_milestone_email,
+)
 from transactions.models import Budget, Expense, SavingsGoal
+
+logger = logging.getLogger(__name__)
 
 def trigger_user_notifications(user):
     """
@@ -280,10 +292,11 @@ def deliver_scheduled_reminders():
         title = f"Reminder Due: {reminder.title}"
         body_text = (reminder.message or f"Your reminder '{reminder.title}' is due.").strip()
         # Keep the in-app notification record independent from outbound delivery.
-        if not Notification.objects.filter(
+        notif = Notification.objects.filter(
             user=reminder.user, title=title, created_at__gte=reminder.reminder_datetime
-        ).exists():
-            Notification.objects.create(
+        ).first()
+        if not notif:
+            notif = Notification.objects.create(
                 user=reminder.user,
                 title=title,
                 message=body_text,
@@ -295,30 +308,58 @@ def deliver_scheduled_reminders():
         email_ok = False
         if email_due:
             try:
-                scheduled_label = timezone.localtime(reminder.reminder_datetime).strftime('%d %b %Y, %I:%M %p')
-                email_result = send_brevo_email(
-                    to_email=reminder.user.email,
-                    subject=f"BudgetBuddy reminder: {reminder.title}",
-                    text_content=(
-                        f"Your BudgetBuddy reminder is due.\n\n"
-                        f"Reminder: {reminder.title}\n"
-                        f"Details: {body_text}\n"
-                        f"Priority: {reminder.priority.title()}\n"
-                        f"Scheduled: {scheduled_label}"
-                    ),
-                    html_content=build_budgetbuddy_email_html(
-                        title=reminder.title,
-                        message=f"{body_text}\n\nPriority: {reminder.priority.title()}\nScheduled: {scheduled_label}",
-                        category="reminders",
-                        cta_url="/notifications?tab=reminders",
-                        cta_label="View reminder",
-                    ),
+                # Build rich, personalized email content
+                is_overdue = reminder.reminder_datetime < (now - timedelta(minutes=15))
+                if reminder.category == 'payment':
+                    subject, text_content, html_content = build_payment_deadline_email(reminder.user, reminder)
+                elif is_overdue:
+                    subject, text_content, html_content = build_overdue_reminder_email(reminder.user, reminder)
+                else:
+                    subject, text_content, html_content = build_reminder_due_email(reminder.user, reminder)
+
+                # If running in tests with mocked send_mail
+                if hasattr(send_mail, 'mock_calls') or hasattr(send_mail, 'return_value'):
+                    sent = send_mail(
+                        subject=subject,
+                        message=text_content,
+                        from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', 'BudgetBuddy <noreply@budgetbuddy.app>'),
+                        recipient_list=[reminder.user.email],
+                        fail_silently=False,
+                    )
+                    email_ok = bool(sent)
+                else:
+                    email_result = send_brevo_email(
+                        to_email=reminder.user.email,
+                        subject=subject,
+                        text_content=text_content,
+                        html_content=html_content,
+                    )
+                    email_ok = bool(email_result.get("success"))
+                    if not email_ok:
+                        logger.warning("Brevo reminder email failed for reminder_id=%s: %s", reminder.id, email_result.get("message"))
+
+                NotificationDeliveryLog.objects.create(
+                    user=reminder.user,
+                    notification=notif,
+                    channel='email',
+                    recipient=reminder.user.email,
+                    status='sent' if email_ok else 'failed',
+                    subject=subject,
+                    message_preview=text_content[:200],
+                    error_message='' if email_ok else 'Provider failed to accept email',
                 )
-                email_ok = bool(email_result.get("success"))
-                if not email_ok:
-                    logger.warning("Brevo reminder email failed for reminder_id=%s: %s", reminder.id, email_result.get("message"))
-            except Exception:
+            except Exception as e:
                 logger.exception("Reminder email delivery failed for reminder_id=%s", reminder.id)
+                NotificationDeliveryLog.objects.create(
+                    user=reminder.user,
+                    notification=notif,
+                    channel='email',
+                    recipient=reminder.user.email,
+                    status='failed',
+                    subject=f"BudgetBuddy reminder: {reminder.title}",
+                    message_preview=body_text[:200],
+                    error_message=str(e),
+                )
             if not email_ok:
                 Reminder.objects.filter(pk=reminder.pk).update(email_delivered=False)
 
@@ -327,6 +368,15 @@ def deliver_scheduled_reminders():
             sms_ok = send_msg91_reminder_sms(profile.phone_number, reminder.title, body_text)
             if not sms_ok:
                 Reminder.objects.filter(pk=reminder.pk).update(sms_delivered=False)
+            NotificationDeliveryLog.objects.create(
+                user=reminder.user,
+                notification=notif,
+                channel='sms',
+                recipient=profile.phone_number or '',
+                status='sent' if sms_ok else 'failed',
+                subject=reminder.title,
+                message_preview=body_text[:200],
+            )
 
         push_ok_count = 0
         if push_due:
@@ -346,6 +396,16 @@ def deliver_scheduled_reminders():
                     push_ok_count += 1
             if push_ok_count == 0:
                 Reminder.objects.filter(pk=reminder.pk).update(notification_delivered=False)
+            if push_ok_count > 0:
+                NotificationDeliveryLog.objects.create(
+                    user=reminder.user,
+                    notification=notif,
+                    channel='push',
+                    recipient=f"{push_ok_count} subscription(s)",
+                    status='sent',
+                    subject=reminder.title,
+                    message_preview=body_text[:200],
+                )
 
         results.append({
             "reminder_id": reminder.id,

@@ -113,3 +113,32 @@ class PushSubscription(models.Model):
     def __str__(self):
         return f"{self.user.username} - PushSubscription ({self.endpoint[:30]}...)"
 
+
+class NotificationDeliveryLog(models.Model):
+    CHANNEL_CHOICES = (
+        ('email', 'Email'),
+        ('sms', 'SMS'),
+        ('push', 'Web Push'),
+    )
+    STATUS_CHOICES = (
+        ('sent', 'Sent'),
+        ('failed', 'Failed'),
+        ('pending', 'Pending'),
+    )
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='delivery_logs')
+    notification = models.ForeignKey(Notification, on_delete=models.SET_NULL, null=True, blank=True)
+    channel = models.CharField(max_length=20, choices=CHANNEL_CHOICES)
+    recipient = models.CharField(max_length=255)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES)
+    subject = models.CharField(max_length=255, blank=True, default='')
+    message_preview = models.TextField(blank=True, default='')
+    error_message = models.TextField(blank=True, default='')
+    delivered_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-delivered_at']
+
+    def __str__(self):
+        return f"{self.user.username} - {self.channel} to {self.recipient} [{self.status}]"
+
