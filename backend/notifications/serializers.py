@@ -79,13 +79,28 @@ class ReminderSerializer(serializers.ModelSerializer):
             'is_dismissed',
             'snooze_count',
             'notification_delivered',
+            'email_delivered',
+            'sms_delivered',
             'last_notified_at',
             'is_due',
             'is_overdue',
             'is_upcoming',
             'created_at',
         )
-        read_only_fields = ('id', 'is_completed', 'is_dismissed', 'snooze_count', 'notification_delivered', 'last_notified_at', 'is_due', 'is_overdue', 'is_upcoming', 'created_at')
+        read_only_fields = (
+            'id',
+            'is_completed',
+            'is_dismissed',
+            'snooze_count',
+            'notification_delivered',
+            'email_delivered',
+            'sms_delivered',
+            'last_notified_at',
+            'is_due',
+            'is_overdue',
+            'is_upcoming',
+            'created_at',
+        )
 
     def to_internal_value(self, data):
         # Work on a mutable copy

@@ -1,3 +1,6 @@
+import os
+from unittest.mock import patch, MagicMock
+from django.core.cache import cache
 from django.test import TestCase, override_settings
 from django.contrib.auth.models import User
 from django.urls import reverse
@@ -6,7 +9,7 @@ from rest_framework import status
 from decimal import Decimal
 from datetime import date
 from django.utils import timezone
-from notifications.models import Notification
+from notifications.models import Notification, Reminder, PushSubscription, NotificationDeliveryLog
 from transactions.models import Budget, Expense, SavingsGoal
 
 class NotificationsModuleTests(TestCase):
@@ -729,3 +732,73 @@ class WebPushModuleTests(TestCase):
         # must not be allowed to invoke it through the public API.
         response = self.client.post(reverse('push_deliver_due'))
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+
+class SchedulerCronTriggerEndpointTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(
+            username='cron_test_user',
+            email='cron-test@budgetbuddy.app',
+            password='TestPassword123!',
+        )
+        self.url = reverse('reminder_scheduler_cron')
+        cache.clear()
+
+    def test_scheduler_cron_rejects_get(self):
+        res = self.client.get(self.url)
+        self.assertEqual(res.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+
+    def test_scheduler_cron_returns_503_when_secret_unset(self):
+        with patch.dict(os.environ, {}, clear=True):
+            with override_settings(CRON_SECRET_TOKEN=''):
+                res = self.client.post(self.url)
+                self.assertEqual(res.status_code, status.HTTP_503_SERVICE_UNAVAILABLE)
+
+    def test_scheduler_cron_rejects_missing_or_invalid_secret(self):
+        with patch.dict(os.environ, {'CRON_SECRET_TOKEN': 'super_secure_cron_token_123'}):
+            # Missing token
+            res1 = self.client.post(self.url)
+            self.assertEqual(res1.status_code, status.HTTP_401_UNAUTHORIZED)
+
+            # Invalid token
+            res2 = self.client.post(self.url, HTTP_X_CRON_SECRET='wrong_secret')
+            self.assertEqual(res2.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_scheduler_cron_accepts_valid_secret_and_executes(self):
+        from unittest.mock import patch
+        secret = 'super_secure_cron_token_123'
+        now = timezone.now()
+
+        reminder = Reminder.objects.create(
+            user=self.user,
+            title='Upcoming Utility',
+            reminder_datetime=now - timezone.timedelta(minutes=5),
+            notification_delivered=False,
+            email_delivered=False,
+        )
+
+        with patch.dict(os.environ, {'CRON_SECRET_TOKEN': secret}):
+            with patch('notifications.services.brevo_email_ready', return_value=True):
+                with patch('notifications.services.send_brevo_email', return_value={'success': True, 'message_id': 'brevo-123'}):
+                    # Header format 1: X-Cron-Secret
+                    res = self.client.post(self.url, HTTP_X_CRON_SECRET=secret)
+                    self.assertEqual(res.status_code, status.HTTP_200_OK)
+                    self.assertEqual(res.data['status'], 'success')
+                    self.assertEqual(res.data['processed'], 1)
+                    self.assertEqual(res.data['delivered']['email'], 1)
+
+        reminder.refresh_from_db()
+        self.assertTrue(reminder.email_delivered)
+
+    def test_scheduler_cron_rate_limiting(self):
+        secret = 'super_secure_cron_token_123'
+        with patch.dict(os.environ, {'CRON_SECRET_TOKEN': secret}):
+            with patch('notifications.services.deliver_scheduled_reminders', return_value={'processed': 0, 'results': []}):
+                # First run succeeds
+                res1 = self.client.post(self.url, HTTP_AUTHORIZATION=f'Bearer {secret}')
+                self.assertEqual(res1.status_code, status.HTTP_200_OK)
+
+                # Second immediate run is rate limited
+                res2 = self.client.post(self.url, HTTP_AUTHORIZATION=f'Bearer {secret}')
+                self.assertEqual(res2.status_code, status.HTTP_429_TOO_MANY_REQUESTS)

@@ -282,3 +282,6 @@ CELERY_BEAT_SCHEDULE = {
     },
 }
 
+# External Cron Scheduler Secret Token
+CRON_SECRET_TOKEN = os.environ.get('CRON_SECRET_TOKEN', '').strip()
+

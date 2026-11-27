@@ -1,11 +1,15 @@
 import os
+import hmac
 import logging
 from django.conf import settings
+from django.core.cache import cache
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import permissions, status
 from django.utils import timezone
 from django.core.mail import send_mail
+
+logger = logging.getLogger(__name__)
 from .models import Notification, Reminder, PushSubscription
 from .serializers import NotificationSerializer, ReminderSerializer, PushSubscriptionSerializer
 from .services import trigger_user_notifications, send_test_push, deliver_scheduled_reminders
@@ -525,19 +529,113 @@ class PushTestView(APIView):
         return Response(result, status=status_code)
 
 
+class SchedulerCronTriggerView(APIView):
+    """
+    POST /api/notifications/reminders/scheduler/
+    Dedicated secure webhook for external cron services (cron-job.org, GitHub Actions).
+    Evaluates and delivers due financial reminders without requiring a user JWT.
+    Protected by CRON_SECRET_TOKEN / SCHEDULER_SECRET_TOKEN environment variable.
+    """
+    authentication_classes = []
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        configured_secret = (
+            os.environ.get("CRON_SECRET_TOKEN", "").strip()
+            or os.environ.get("SCHEDULER_SECRET_TOKEN", "").strip()
+            or os.environ.get("REMINDER_CRON_SECRET", "").strip()
+            or getattr(settings, "CRON_SECRET_TOKEN", "").strip()
+        )
+        if not configured_secret:
+            logger.error("Scheduler endpoint accessed but CRON_SECRET_TOKEN is not configured in server environment.")
+            return Response(
+                {"error": "Scheduler cron secret is not configured in the server environment."},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        # Extract token from headers: X-Cron-Secret, Authorization (Bearer), or X-Scheduler-Token
+        provided_token = ""
+        auth_header = request.META.get("HTTP_AUTHORIZATION", "").strip()
+        if auth_header.startswith("Bearer "):
+            provided_token = auth_header[7:].strip()
+        if not provided_token:
+            provided_token = request.META.get("HTTP_X_CRON_SECRET", "").strip()
+        if not provided_token:
+            provided_token = request.META.get("HTTP_X_SCHEDULER_TOKEN", "").strip()
+        if not provided_token and isinstance(request.data, dict):
+            provided_token = str(request.data.get("cron_secret", "")).strip()
+
+        # Constant-time comparison to prevent timing attacks
+        if not provided_token or not hmac.compare_digest(provided_token, configured_secret):
+            logger.warning("Unauthorized scheduler cron invocation attempt.")
+            return Response(
+                {"error": "Unauthorized. Invalid or missing cron secret token."},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        # Rate limiting: prevent bursts closer than 10 seconds apart
+        cache_key = "budgetbuddy_scheduler_cron_last_run"
+        now_ts = timezone.now().timestamp()
+        last_run = cache.get(cache_key)
+        if last_run and (now_ts - last_run) < 10:
+            return Response(
+                {
+                    "status": "rate_limited",
+                    "message": "Scheduler ran recently. Throttled to prevent overlapping runs.",
+                    "seconds_since_last_run": round(now_ts - last_run, 2),
+                },
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
+            )
+        cache.set(cache_key, now_ts, timeout=60)
+
+        # Execute atomic dispatcher
+        try:
+            res = deliver_scheduled_reminders()
+        except Exception as e:
+            logger.exception("Scheduler execution failed during deliver_scheduled_reminders")
+            return Response(
+                {"error": "Dispatcher execution failure", "detail": str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        results = res.get("results", [])
+        emails_sent = sum(1 for r in results if r.get("email_sent"))
+        emails_failed = sum(1 for r in results if not r.get("email_sent") and r.get("reminder_id"))
+        push_delivered = sum(r.get("push_delivered", 0) for r in results)
+
+        return Response(
+            {
+                "status": "success",
+                "timestamp": timezone.now().isoformat(),
+                "processed": res.get("processed", 0),
+                "delivered": {
+                    "email": emails_sent,
+                    "push": push_delivered,
+                },
+                "failed": {
+                    "email": emails_failed if emails_sent == 0 and res.get("processed", 0) > 0 else 0,
+                },
+                "results": results,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    def get(self, request):
+        return Response(
+            {"error": "Method Not Allowed. External scheduler requires HTTP POST with valid secret header."},
+            status=status.HTTP_405_METHOD_NOT_ALLOWED,
+        )
+
+
 class TriggerDeliverRemindersView(APIView):
     """
     POST /api/notifications/push/deliver-due/
-    GET  /api/notifications/push/deliver-due/
-    Triggers evaluation and delivery of due financial reminders across configured channels.
+    Manually triggers the global scheduled-reminder dispatcher.
+    Restricted to administrators because it processes reminders for all users.
     """
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAdminUser]
 
     def post(self, request):
-        res = deliver_scheduled_reminders()
-        return Response(res, status=status.HTTP_200_OK)
-
-    def get(self, request):
         res = deliver_scheduled_reminders()
         return Response(res, status=status.HTTP_200_OK)
 
