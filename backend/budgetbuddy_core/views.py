@@ -39,6 +39,28 @@ def health_check(request):
     else:
         db_engine = "custom"
 
+    # Check Redis / Celery broker connectivity
+    redis_url = os.environ.get('CELERY_BROKER_URL') or os.environ.get('REDIS_URL')
+    if redis_url and not redis_url.startswith('redis://localhost'):
+        try:
+            import redis
+            r = redis.from_url(redis_url, socket_connect_timeout=2)
+            r.ping()
+            redis_status = "connected"
+        except Exception as e:
+            redis_status = f"unreachable ({type(e).__name__})"
+    elif redis_url:
+        redis_status = "local_default"
+    else:
+        redis_status = "not_configured"
+
+    # Brevo configuration status
+    has_brevo = bool(
+        (os.environ.get("BREVO_API_KEY", "").strip() or os.environ.get("BREVO_SMTP_KEY", "").strip())
+        and (os.environ.get("BREVO_SENDER_EMAIL", "").strip() or os.environ.get("EMAIL_HOST_USER", "").strip())
+    )
+    brevo_status = "configured" if has_brevo else "not_configured"
+
     overall_status = "healthy" if db_status == "connected" else "degraded"
 
     return Response({
@@ -48,6 +70,8 @@ def health_check(request):
         "environment": env,
         "database": db_status,
         "database_engine": db_engine,
+        "redis_broker": redis_status,
+        "brevo_email": brevo_status,
         "timestamp": datetime.now(timezone.utc).isoformat()
     })
 

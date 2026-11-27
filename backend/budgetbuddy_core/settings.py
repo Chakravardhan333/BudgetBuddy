@@ -274,7 +274,11 @@ CELERY_TIMEZONE = TIME_ZONE
 CELERY_BEAT_SCHEDULE = {
     'deliver-due-reminders': {
         'task': 'notifications.tasks.deliver_due_reminders_task',
-        'schedule': 30.0,
+        'schedule': 60.0,
+    },
+    'deliver-scheduled-reminders': {
+        'task': 'notifications.tasks.deliver_scheduled_reminders_task',
+        'schedule': 60.0,
     },
 }
 

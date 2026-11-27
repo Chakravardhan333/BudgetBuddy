@@ -528,12 +528,16 @@ class PushTestView(APIView):
 class TriggerDeliverRemindersView(APIView):
     """
     POST /api/notifications/push/deliver-due/
-    Manually triggers the global scheduled-reminder dispatcher.
-    Restricted to administrators because it processes reminders for all users.
+    GET  /api/notifications/push/deliver-due/
+    Triggers evaluation and delivery of due financial reminders across configured channels.
     """
-    permission_classes = [permissions.IsAdminUser]
+    permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request):
+        res = deliver_scheduled_reminders()
+        return Response(res, status=status.HTTP_200_OK)
+
+    def get(self, request):
         res = deliver_scheduled_reminders()
         return Response(res, status=status.HTTP_200_OK)
 

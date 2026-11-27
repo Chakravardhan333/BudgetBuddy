@@ -44,6 +44,7 @@ urlpatterns = [
     path('reminders/<int:pk>/snooze/', ReminderSnoozeView.as_view(), name='reminder_snooze'),
     path('reminders/<int:pk>/delivered/', ReminderMarkDeliveredView.as_view(), name='reminder_mark_delivered'),
     path('reminders/<int:pk>/mark-delivered/', ReminderMarkDeliveredView.as_view(), name='reminder_mark_delivered_alt'),
+    path('reminders/deliver-due/', TriggerDeliverRemindersView.as_view(), name='reminder_deliver_due'),
     # Web Push endpoints
     path('push/vapid-key/', VapidPublicKeyView.as_view(), name='push_vapid_key'),
     path('push/subscribe/', PushSubscriptionView.as_view(), name='push_subscribe'),

@@ -17,3 +17,9 @@ def deliver_due_reminders_task():
         logger.error(f"Error executing deliver_due_reminders_task: {exc}")
         raise
 
+
+@shared_task(name='notifications.tasks.deliver_scheduled_reminders_task')
+def deliver_scheduled_reminders_task():
+    """Alias for deliver_due_reminders_task matching schedule specifications."""
+    return deliver_due_reminders_task()
+
